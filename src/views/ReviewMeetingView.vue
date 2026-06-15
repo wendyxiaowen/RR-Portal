@@ -31,19 +31,27 @@ async function approve() {
 </script>
 <template>
   <AppLayout>
-    <h2>月度评审会议 — {{ month }}</h2>
-    <label class="block">优化 / 整合 / 淘汰建议
-      <textarea v-model="suggestions" rows="6"></textarea>
-    </label>
-    <div class="actions">
-      <button @click="saveDraft">保存草稿</button>
-      <button v-if="auth.role && canApproveStatus(auth.role)" @click="approve">审批通过</button>
+    <div class="page">
+      <h2>月度评审会议 — {{ month }}</h2>
+      <section class="card">
+        <label class="block">优化 / 整合 / 淘汰建议
+          <textarea v-model="suggestions" rows="6"></textarea>
+        </label>
+        <div class="actions">
+          <button class="ghost" @click="saveDraft">保存草稿</button>
+          <button v-if="auth.role && canApproveStatus(auth.role)" @click="approve">审批通过</button>
+        </div>
+        <p class="muted" style="margin-top:.75rem">状态：
+          <span class="badge" :class="reviews.current?.status === 'approved' ? 'status-active' : 'status-limited'">
+            {{ reviews.current?.status === 'approved' ? '已审批' : '草稿' }}
+          </span>
+        </p>
+      </section>
     </div>
-    <p>状态：{{ reviews.current?.status ?? 'draft' }}</p>
   </AppLayout>
 </template>
 <style scoped>
-.block { display: flex; flex-direction: column; gap: 0.3rem; max-width: 600px; }
+.block { display: flex; flex-direction: column; gap: 0.3rem; }
 .block textarea { width: 100%; }
 .actions { display: flex; gap: 0.75rem; margin-top: 0.75rem; }
 </style>

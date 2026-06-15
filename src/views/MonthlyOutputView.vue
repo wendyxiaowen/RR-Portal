@@ -36,9 +36,12 @@ async function save(factoryId: string) {
 </script>
 <template>
   <AppLayout>
+    <div class="page">
     <h2>月度产值录入</h2>
-    <label>月份 <input v-model="month" type="month" @change="load" /></label>
-    <button @click="load">加载</button>
+    <div class="toolbar">
+      <label>月份 <input v-model="month" type="month" @change="load" /></label>
+      <button @click="load">加载</button>
+    </div>
     <table>
       <thead><tr><th>工厂</th><th>当月产值</th><th>对账单号</th><th></th></tr></thead>
       <tbody>
@@ -50,9 +53,6 @@ async function save(factoryId: string) {
         </tr>
       </tbody>
     </table>
+    </div>
   </AppLayout>
 </template>
-<style scoped>
-table { width: 100%; border-collapse: collapse; margin-top: 0.75rem; }
-th, td { border: 1px solid #ddd; padding: 0.4rem 0.6rem; text-align: left; }
-</style>

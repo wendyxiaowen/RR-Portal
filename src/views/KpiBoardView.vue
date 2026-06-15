@@ -18,8 +18,12 @@ function nameOf(userId: string): string {
 </script>
 <template>
   <AppLayout>
-    <h2>岗位 KPI 看板</h2>
-    <label>月份 <input v-model="month" type="month" @change="kpi.fetchByMonth(month)" /></label>
+    <div class="page">
+    <div class="toolbar">
+      <h2 style="margin:0">岗位 KPI 看板</h2>
+      <span class="spacer"></span>
+      <label>月份 <input v-model="month" type="month" @change="kpi.fetchByMonth(month)" /></label>
+    </div>
     <table>
       <thead><tr><th>岗位/人员</th><th>履职次数</th><th>按时率</th></tr></thead>
       <tbody>
@@ -31,10 +35,6 @@ function nameOf(userId: string): string {
       </tbody>
     </table>
     <p v-if="!userIds.length" class="hint">该月暂无履职记录</p>
+    </div>
   </AppLayout>
 </template>
-<style scoped>
-table { width: 100%; border-collapse: collapse; margin-top: 0.75rem; }
-th, td { border: 1px solid #ddd; padding: 0.4rem 0.6rem; text-align: left; }
-.hint { color: #888; }
-</style>

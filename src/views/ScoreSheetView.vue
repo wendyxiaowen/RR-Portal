@@ -72,6 +72,7 @@ async function saveFlag() {
 </script>
 <template>
   <AppLayout>
+    <div class="page">
     <h2>评分单 — {{ month }}</h2>
     <table>
       <thead><tr><th>评分项</th><th>满分</th><th>得分</th><th>主体</th></tr></thead>
@@ -88,13 +89,17 @@ async function saveFlag() {
         </tr>
       </tbody>
     </table>
-    <p><strong>预估总分：{{ liveTotal }}（{{ liveGrade }}级）</strong> — 最终以服务端核定为准</p>
+    <p class="total-line">
+      预估总分 <strong>{{ liveTotal }}</strong>
+      <span class="badge" :class="'badge-' + liveGrade">{{ liveGrade }} 级</span>
+      <span class="hint">最终以服务端核定为准</span>
+    </p>
     <button @click="submit">提交评分</button>
 
-    <section class="flag-box">
+    <section class="card flag-box">
       <h3>红黄牌</h3>
-      <label>问题依据 <textarea v-model="flagReason"></textarea></label>
-      <div v-if="isManager">
+      <label class="block">问题依据 <textarea v-model="flagReason"></textarea></label>
+      <div v-if="isManager" class="flag-act">
         <select v-model="flag">
           <option value="none">无</option>
           <option value="yellow">黄牌</option>
@@ -104,11 +109,14 @@ async function saveFlag() {
       </div>
       <button v-else @click="saveReason">提交依据</button>
     </section>
+    </div>
   </AppLayout>
 </template>
 <style scoped>
-table { width: 100%; border-collapse: collapse; margin-top: 0.75rem; }
-th, td { border: 1px solid #ddd; padding: 0.4rem 0.6rem; text-align: left; }
-.flag-box { margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid #eee; }
+.total-line { display: flex; align-items: center; gap: .6rem; margin: 1rem 0; font-size: 1.05rem; }
+.total-line strong { font-size: 1.3rem; color: var(--primary); }
+.flag-box { margin-top: 1.5rem; }
+.block { display: flex; flex-direction: column; gap: .3rem; }
 .flag-box textarea { width: 100%; min-height: 3rem; }
+.flag-act { display: flex; gap: .5rem; margin-top: .6rem; }
 </style>
