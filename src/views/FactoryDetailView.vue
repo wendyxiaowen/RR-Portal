@@ -51,13 +51,15 @@ async function submitIncident() {
   await incidents.fetchByFactory(route.params.id as string)
 }
 
-async function onSave(data: Partial<Factory>) {
+async function onSave(fd: FormData) {
   if (isNew) {
-    const created = await store.create({ ...data, created_by: auth.userId ?? undefined })
+    fd.append('status', 'active')
+    if (auth.userId) fd.append('created_by', auth.userId)
+    const created = await store.create(fd)
     router.push(`/factories/${created.id}`)
   } else {
-    await store.update(route.params.id as string, data)
-    factory.value = { ...factory.value, ...data }
+    await store.update(route.params.id as string, fd)
+    factory.value = await store.get(route.params.id as string)
   }
 }
 
@@ -76,14 +78,15 @@ async function approveStatus() {
 </script>
 <template>
   <AppLayout>
+    <div class="page detail">
     <h2>{{ isNew ? '新增工厂' : factory.name }}</h2>
-    <FactoryForm :model-value="factory" @save="onSave" />
+    <section class="card"><FactoryForm :model-value="factory" @save="onSave" /></section>
 
-    <section v-if="!isNew" class="status-box">
+    <section v-if="!isNew" class="card status-box">
       <h3>合作状态</h3>
       <p>
-        当前：{{ factory.status ? statusLabel[factory.status] : '-' }}
-        待审批：{{ factory.status_pending ? statusLabel[factory.status_pending] : '无' }}
+        当前：<span class="badge" :class="'status-' + factory.status">{{ factory.status ? statusLabel[factory.status] : '-' }}</span>
+        <span class="muted" style="margin-left:1rem">待审批：{{ factory.status_pending ? statusLabel[factory.status_pending] : '无' }}</span>
       </p>
       <div v-if="auth.role === 'sc_manager' || auth.role === 'admin'">
         <label>审批为
@@ -109,7 +112,7 @@ async function approveStatus() {
       </div>
     </section>
 
-    <section v-if="!isNew" class="incidents">
+    <section v-if="!isNew" class="card incidents">
       <h3>异常 / 事故记录</h3>
       <form class="inc-form" @submit.prevent="submitIncident">
         <input v-model="inc.incident_date" type="date" required />
@@ -129,8 +132,12 @@ async function approveStatus() {
         </li>
       </ul>
     </section>
+    </div>
   </AppLayout>
 </template>
 <style scoped>
-.status-box { margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid #eee; }
+.detail { display: flex; flex-direction: column; gap: 1.25rem; }
+.inc-form { display: flex; gap: .5rem; flex-wrap: wrap; align-items: center; margin-bottom: .75rem; }
+.incidents ul { margin: 0; padding-left: 1.1rem; }
+.incidents li { margin: .3rem 0; }
 </style>

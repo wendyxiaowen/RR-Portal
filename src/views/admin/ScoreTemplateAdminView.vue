@@ -3,6 +3,7 @@ import { onMounted, ref, computed } from 'vue'
 import AppLayout from '../../components/AppLayout.vue'
 import { useScoreTemplatesStore } from '../../stores/scoreTemplates'
 import type { ScoreTemplate } from '../../types/score'
+import { CRAFT_LABELS, type Craft } from '../../constants/roles'
 
 const store = useScoreTemplatesStore()
 const draft = ref<Partial<ScoreTemplate>>({
@@ -22,14 +23,16 @@ async function toggle(t: ScoreTemplate) {
 </script>
 <template>
   <AppLayout>
+    <div class="page">
     <h2>评分模板配置（当前启用合计 {{ total }} 分）</h2>
-    <p v-if="total !== 100" class="hint">提示：通用70+专项30 应为100分，当前 {{ total }} 分</p>
+    <p v-if="total !== 100" class="warn">提示：通用70+专项30 应为100分，当前 {{ total }} 分</p>
     <table>
-      <thead><tr><th>名称</th><th>模块</th><th>分值</th><th>打分主体</th><th>工艺</th><th>启用</th></tr></thead>
+      <thead><tr><th>名称</th><th>模块</th><th>分值</th><th>打分主体</th><th>部门</th><th>启用</th></tr></thead>
       <tbody>
         <tr v-for="t in store.items" :key="t.id">
           <td>{{ t.name }}</td><td>{{ t.module }}</td><td>{{ t.max_score }}</td>
-          <td>{{ t.scoring_role }}</td><td>{{ t.craft_filter || '通用' }}</td>
+          <td>{{ t.scoring_role === 'buyer' ? '采购' : '品质' }}</td>
+          <td>{{ t.craft_filter ? CRAFT_LABELS[t.craft_filter as Craft] : '通用' }}</td>
           <td><button @click="toggle(t)">{{ t.is_active ? '停用' : '启用' }}</button></td>
         </tr>
       </tbody>
@@ -44,18 +47,15 @@ async function toggle(t: ScoreTemplate) {
       </select>
       <select v-model="draft.craft_filter">
         <option value="">通用</option>
-        <option value="injection">注塑</option>
-        <option value="painting">喷油</option>
-        <option value="assembly">装配</option>
-        <option value="sewing">毛绒车缝</option>
+        <option v-for="(label, key) in CRAFT_LABELS" :key="key" :value="key">{{ label }}</option>
       </select>
       <button type="submit">添加</button>
     </form>
+    </div>
   </AppLayout>
 </template>
 <style scoped>
-table { width: 100%; border-collapse: collapse; margin-top: 0.75rem; }
-th, td { border: 1px solid #ddd; padding: 0.4rem 0.6rem; text-align: left; }
-.tpl-form { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 0.5rem; }
-.hint { color: #c0392b; }
+h3 { margin-top: 1.5rem; }
+.tpl-form { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 0.5rem; align-items: center; }
+.warn { color: var(--grade-d); font-size: .9rem; }
 </style>

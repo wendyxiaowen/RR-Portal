@@ -29,9 +29,10 @@ async function createUser() {
 </script>
 <template>
   <AppLayout>
+    <div class="page">
     <h2>用户管理</h2>
     <table>
-      <thead><tr><th>姓名</th><th>邮箱</th><th>角色</th><th>工艺</th></tr></thead>
+      <thead><tr><th>姓名</th><th>邮箱</th><th>角色</th><th>部门</th></tr></thead>
       <tbody>
         <tr v-for="u in users" :key="u.id">
           <td>{{ u.display_name }}</td><td>{{ u.email }}</td>
@@ -49,15 +50,15 @@ async function createUser() {
         <option v-for="(label, key) in ROLE_LABELS" :key="key" :value="key">{{ label }}</option>
       </select>
       <select v-model="draft.craft">
-        <option value="">无工艺</option>
+        <option value="">无部门</option>
         <option v-for="(label, key) in CRAFT_LABELS" :key="key" :value="key">{{ label }}</option>
       </select>
       <button type="submit">创建</button>
     </form>
+    </div>
   </AppLayout>
 </template>
 <style scoped>
-table { width: 100%; border-collapse: collapse; margin-top: 0.75rem; }
-th, td { border: 1px solid #ddd; padding: 0.4rem 0.6rem; text-align: left; }
-.user-form { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 0.5rem; }
+h3 { margin-top: 1.5rem; }
+.user-form { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 0.5rem; align-items: center; }
 </style>

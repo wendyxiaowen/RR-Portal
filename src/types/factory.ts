@@ -8,6 +8,8 @@ export interface Factory {
   contact_phone?: string
   address?: string
   workshop_area?: number
+  workshop_info?: string
+  workshop_photos?: string[]
   equipment_list?: string[]
   qualification_files?: string[]
   qualification_expiry?: string

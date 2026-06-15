@@ -7,14 +7,15 @@ export type Craft = 'injection' | 'painting' | 'assembly' | 'sewing'
 
 export const ROLE_LABELS: Record<Role, string> = {
   admin: '管理员', sc_manager: '供应链经理',
-  buyer_injection: '采购专员-注塑', buyer_painting: '采购专员-喷油',
-  buyer_assembly: '采购专员-装配', buyer_sewing: '采购专员-毛绒车缝',
+  buyer_injection: '注塑部采购', buyer_painting: '喷油部采购',
+  buyer_assembly: '装配部采购', buyer_sewing: '车缝部采购',
   finance_cost: '财务成本会计', finance_mgr: '财务主管',
   quality_qc: '品质QC', sc_clerk: '供应链文员',
 }
 
+// 部门标签（底层值仍是 craft，UI 统一以「部门」口径展示）
 export const CRAFT_LABELS: Record<Craft, string> = {
-  injection: '注塑', painting: '喷油', assembly: '装配', sewing: '毛绒车缝',
+  injection: '注塑部', painting: '喷油部', assembly: '装配部', sewing: '车缝部',
 }
 
 // 采购角色 → 其负责的工艺

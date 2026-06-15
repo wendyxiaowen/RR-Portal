@@ -24,10 +24,10 @@ export const useFactoriesStore = defineStore('factories', () => {
   async function get(id: string) {
     return pb.collection('factories').getOne<Factory>(id)
   }
-  async function create(data: Partial<Factory>) {
+  async function create(data: Partial<Factory> | FormData) {
     return pb.collection('factories').create<Factory>(data)
   }
-  async function update(id: string, data: Partial<Factory>) {
+  async function update(id: string, data: Partial<Factory> | FormData) {
     return pb.collection('factories').update<Factory>(id, data)
   }
   return { items, loading, fetchAll, get, create, update }

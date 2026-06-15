@@ -31,27 +31,29 @@ async function saveSummary() {
 </script>
 <template>
   <AppLayout>
-    <h2>月度评审大盘 — {{ month }}</h2>
-    <table>
-      <thead><tr><th>品类</th><th>工厂数</th><th>A</th><th>B</th><th>C</th><th>D</th><th>平均分</th><th>总产值</th></tr></thead>
-      <tbody>
-        <tr v-for="craft in crafts" :key="craft">
-          <td>{{ CRAFT_LABELS[craft] }}</td>
-          <td>{{ summary[craft].factory_count }}</td>
-          <td>{{ summary[craft].grade_dist.A }}</td><td>{{ summary[craft].grade_dist.B }}</td>
-          <td>{{ summary[craft].grade_dist.C }}</td><td>{{ summary[craft].grade_dist.D }}</td>
-          <td>{{ summary[craft].avg_score }}</td><td>{{ summary[craft].total_output }}</td>
-        </tr>
-      </tbody>
-    </table>
-    <div class="actions">
-      <button v-if="auth.role === 'sc_clerk' || auth.role === 'admin'" @click="saveSummary">存档大盘</button>
-      <RouterLink :to="`/review/${month}/meeting`">→ 评审会议记录</RouterLink>
+    <div class="page">
+      <div class="toolbar">
+        <h2 style="margin:0">月度评审大盘</h2>
+        <span class="muted">{{ month }}</span>
+        <span class="spacer"></span>
+        <button v-if="auth.role === 'sc_clerk' || auth.role === 'admin'" @click="saveSummary">存档大盘</button>
+        <RouterLink :to="`/review/${month}/meeting`"><button class="ghost">评审会议记录 →</button></RouterLink>
+      </div>
+      <table>
+        <thead><tr><th>部门</th><th>工厂数</th><th>A</th><th>B</th><th>C</th><th>D</th><th>平均分</th><th>总产值(元)</th></tr></thead>
+        <tbody>
+          <tr v-for="craft in crafts" :key="craft">
+            <td><strong>{{ CRAFT_LABELS[craft] }}</strong></td>
+            <td>{{ summary[craft].factory_count }}</td>
+            <td><span v-if="summary[craft].grade_dist.A" class="badge badge-A">{{ summary[craft].grade_dist.A }}</span><span v-else class="muted">0</span></td>
+            <td><span v-if="summary[craft].grade_dist.B" class="badge badge-B">{{ summary[craft].grade_dist.B }}</span><span v-else class="muted">0</span></td>
+            <td><span v-if="summary[craft].grade_dist.C" class="badge badge-C">{{ summary[craft].grade_dist.C }}</span><span v-else class="muted">0</span></td>
+            <td><span v-if="summary[craft].grade_dist.D" class="badge badge-D">{{ summary[craft].grade_dist.D }}</span><span v-else class="muted">0</span></td>
+            <td><strong>{{ summary[craft].avg_score }}</strong></td>
+            <td>{{ summary[craft].total_output.toLocaleString() }}</td>
+          </tr>
+        </tbody>
+      </table>
     </div>
   </AppLayout>
 </template>
-<style scoped>
-table { width: 100%; border-collapse: collapse; margin-top: 0.75rem; }
-th, td { border: 1px solid #ddd; padding: 0.4rem 0.6rem; text-align: center; }
-.actions { display: flex; gap: 1rem; align-items: center; margin-top: 1rem; }
-</style>
