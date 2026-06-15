@@ -20,6 +20,7 @@ const auth = useAuthStore()
         <nav>
           <RouterLink to="/dashboard">首页</RouterLink>
           <RouterLink to="/factories">工厂</RouterLink>
+          <RouterLink to="/orders">下单明细</RouterLink>
           <RouterLink v-if="auth.role && canEditOutput(auth.role)" to="/monthly-output">产值录入</RouterLink>
           <RouterLink to="/kpi">KPI看板</RouterLink>
           <RouterLink v-if="auth.role && canEditTemplates(auth.role)" to="/admin/score-templates">评分模板</RouterLink>
