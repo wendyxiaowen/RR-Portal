@@ -22,6 +22,7 @@ const STATUS: { value: OrderStatus; label: string; cls: string }[] = [
   { value: 'producing', label: '生产中', cls: 'badge-B' },
   { value: 'delivered', label: '已交货', cls: 'status-active' },
   { value: 'cancelled', label: '已取消', cls: 'status-eliminated' },
+  { value: 'returned', label: '退货', cls: 'flag-red' },
 ]
 const statusMeta = (s?: string) => STATUS.find((x) => x.value === s)
 
@@ -58,6 +59,10 @@ async function changeNotes(o: Order, ev: Event) {
   const v = (ev.target as HTMLInputElement).value
   await orders.update(o.id, { notes: v })
 }
+async function changeDefect(o: Order, ev: Event) {
+  const raw = (ev.target as HTMLInputElement).value
+  await orders.update(o.id, { defect_rate: raw === '' ? undefined : Number(raw) })
+}
 function factoryName(o: Order) { return o.expand?.factory?.name ?? '-' }
 </script>
 <template>
@@ -91,6 +96,7 @@ function factoryName(o: Order) { return o.expand?.factory?.name ?? '-' }
           <label>数量 <input v-model.number="draft.quantity" type="number" min="0" /></label>
           <label>单价 <input v-model.number="draft.unit_price" type="number" min="0" step="0.01" /></label>
           <label>金额 <input :value="draftAmount" type="number" disabled /></label>
+          <label>次品率(%) <input v-model.number="draft.defect_rate" type="number" min="0" step="0.1" /></label>
           <label>下单日期 <input v-model="draft.order_date" type="date" /></label>
           <label>交货日期 <input v-model="draft.delivery_date" type="date" /></label>
           <label>备注 <input v-model="draft.notes" placeholder="可选" /></label>
@@ -99,7 +105,7 @@ function factoryName(o: Order) { return o.expand?.factory?.name ?? '-' }
       </section>
 
       <table>
-        <thead><tr><th>工厂</th><th>工序</th><th>货号</th><th>产品</th><th>数量</th><th>单价</th><th>金额</th><th>下单日期</th><th>交货日期</th><th>状态</th><th>备注</th></tr></thead>
+        <thead><tr><th>工厂</th><th>工序</th><th>货号</th><th>产品</th><th>数量</th><th>单价</th><th>金额</th><th>下单日期</th><th>交货日期</th><th>状态</th><th>次品率</th><th>备注</th></tr></thead>
         <tbody>
           <tr v-for="o in deptOrders" :key="o.id">
             <td>{{ factoryName(o) }}</td>
@@ -118,10 +124,16 @@ function factoryName(o: Order) { return o.expand?.factory?.name ?? '-' }
               </select>
             </td>
             <td>
+              <span class="defect-cell">
+                <input class="defect-input" :value="o.defect_rate ?? ''" type="number" min="0" step="0.1"
+                  placeholder="-" @change="changeDefect(o, $event)" /><span class="pct">%</span>
+              </span>
+            </td>
+            <td>
               <input class="notes-input" :value="o.notes ?? ''" placeholder="备注" @change="changeNotes(o, $event)" />
             </td>
           </tr>
-          <tr v-if="!deptOrders.length"><td colspan="11" class="hint" style="text-align:center">该部门暂无订单</td></tr>
+          <tr v-if="!deptOrders.length"><td colspan="12" class="hint" style="text-align:center">该部门暂无订单</td></tr>
         </tbody>
       </table>
     </div>
@@ -134,4 +146,7 @@ function factoryName(o: Order) { return o.expand?.factory?.name ?? '-' }
 .order-form label { display: flex; flex-direction: column; gap: .25rem; }
 .status-sel { border: none; font-weight: 600; font-size: .82rem; padding: .2rem .5rem; border-radius: 999px; cursor: pointer; }
 .notes-input { width: 100%; min-width: 120px; padding: .3rem .5rem; font-size: .85rem; }
+.defect-cell { display: inline-flex; align-items: center; gap: 2px; }
+.defect-input { width: 56px; padding: .3rem .4rem; font-size: .85rem; }
+.pct { color: var(--text-soft); font-size: .82rem; }
 </style>

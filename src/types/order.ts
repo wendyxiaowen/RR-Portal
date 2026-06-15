@@ -1,4 +1,4 @@
-export type OrderStatus = 'placed' | 'producing' | 'delivered' | 'cancelled'
+export type OrderStatus = 'placed' | 'producing' | 'delivered' | 'cancelled' | 'returned'
 export interface Order {
   id: string
   factory: string
@@ -8,6 +8,7 @@ export interface Order {
   quantity?: number
   unit_price?: number
   amount?: number
+  defect_rate?: number
   order_date?: string
   delivery_date?: string
   status?: OrderStatus
