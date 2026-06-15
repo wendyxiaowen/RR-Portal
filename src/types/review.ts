@@ -13,5 +13,6 @@ export interface ReviewMeeting {
   participants?: string[]
   meeting_date?: string
   approved_by?: string
+  summary_by?: string
   status: 'draft' | 'approved'
 }
