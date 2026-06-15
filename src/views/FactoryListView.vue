@@ -16,64 +16,64 @@ onMounted(() => store.fetchAll())
 const visible = computed(() =>
   filterByCraft(store.items, auth.role ? visibleCraft(auth.role) : null),
 )
-const statusLabel: Record<string, string> = {
-  active: '正常', limited: '限单', suspended: '暂停', eliminated: '淘汰',
-}
-// 部门（工艺）顺序与显示名
+// 部门定义（底层值仍是 craft）
 const DEPTS: { craft: Craft; name: string; icon: string }[] = [
   { craft: 'injection', name: '注塑部', icon: '🧩' },
   { craft: 'painting', name: '喷油部', icon: '🎨' },
   { craft: 'assembly', name: '装配部', icon: '🔧' },
   { craft: 'sewing', name: '车缝部', icon: '🧵' },
 ]
-// 按部门分组，仅保留有工厂的部门
-const groups = computed(() =>
-  DEPTS.map((d) => ({ ...d, list: visible.value.filter((f: Factory) => f.craft === d.craft) }))
-    .filter((g) => g.list.length > 0),
+const cards = computed(() =>
+  DEPTS.map((d) => {
+    const list = visible.value.filter((f: Factory) => f.craft === d.craft)
+    return {
+      ...d,
+      count: list.length,
+      warn: list.filter((f) => f.status === 'limited' || f.status === 'suspended' || f.status === 'eliminated').length,
+    }
+  }).filter((c) => c.count > 0),
 )
 </script>
 <template>
   <AppLayout>
     <div class="page">
       <div class="toolbar">
-        <h2 style="margin:0">工厂列表</h2>
-        <span class="muted">共 {{ visible.length }} 家 · {{ groups.length }} 个部门</span>
+        <h2 style="margin:0">工厂管理</h2>
+        <span class="muted">共 {{ visible.length }} 家 · {{ cards.length }} 个部门</span>
         <span class="spacer"></span>
         <RouterLink to="/factories/new"><button>+ 新增工厂</button></RouterLink>
       </div>
 
-      <section v-for="g in groups" :key="g.craft" class="dept">
-        <div class="dept-head">
-          <span class="dept-ico">{{ g.icon }}</span>
-          <h3>{{ g.name }}</h3>
-          <span class="dept-cnt">{{ g.list.length }} 家</span>
-        </div>
-        <table>
-          <thead><tr><th>名称</th><th>状态</th><th></th></tr></thead>
-          <tbody>
-            <tr v-for="f in g.list" :key="f.id">
-              <td>{{ f.name }}</td>
-              <td><span class="badge" :class="'status-' + f.status">{{ statusLabel[f.status] }}</span></td>
-              <td><RouterLink :to="`/factories/${f.id}`">详情 →</RouterLink></td>
-            </tr>
-          </tbody>
-        </table>
-      </section>
+      <div class="dept-grid">
+        <RouterLink v-for="c in cards" :key="c.craft" class="dept-card" :to="`/factories/dept/${c.craft}`">
+          <span class="ico">{{ c.icon }}</span>
+          <div class="info">
+            <span class="name">{{ c.name }}</span>
+            <span class="sub">{{ c.count }} 家工厂<span v-if="c.warn" class="warn"> · {{ c.warn }} 家预警</span></span>
+          </div>
+          <span class="arrow">→</span>
+        </RouterLink>
+      </div>
 
-      <p v-if="!groups.length" class="hint">暂无工厂数据</p>
+      <p v-if="!cards.length" class="hint">暂无工厂数据</p>
     </div>
   </AppLayout>
 </template>
 <style scoped>
-.dept { margin-bottom: 1.5rem; }
-.dept-head { display: flex; align-items: center; gap: .6rem; margin-bottom: .5rem; }
-.dept-head h3 { margin: 0; }
-.dept-ico {
-  width: 32px; height: 32px; display: grid; place-items: center;
-  background: var(--primary-soft); border-radius: 8px; font-size: 1.1rem;
+.dept-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 1rem; }
+.dept-card {
+  display: flex; align-items: center; gap: 1rem; text-decoration: none; color: var(--text);
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 1.25rem 1.4rem; box-shadow: var(--shadow); transition: all .15s ease;
 }
-.dept-cnt {
-  font-size: .78rem; color: var(--primary); background: var(--primary-soft);
-  padding: .1rem .55rem; border-radius: 999px; font-weight: 600;
+.dept-card:hover {
+  border-color: var(--primary-border); transform: translateY(-2px);
+  box-shadow: 0 10px 24px -12px rgba(79,70,229,.45); text-decoration: none;
 }
+.ico { width: 52px; height: 52px; display: grid; place-items: center; font-size: 1.6rem; background: var(--primary-soft); border-radius: 14px; }
+.info { display: flex; flex-direction: column; flex: 1; }
+.name { font-size: 1.1rem; font-weight: 600; }
+.sub { font-size: .85rem; color: var(--text-soft); }
+.warn { color: var(--grade-c); font-weight: 600; }
+.arrow { color: var(--text-faint); font-size: 1.2rem; }
 </style>

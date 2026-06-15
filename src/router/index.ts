@@ -8,6 +8,7 @@ const routes: RouteRecordRaw[] = [
   { path: '/dashboard', component: () => import('../views/DashboardView.vue') },
   { path: '/factories', component: () => import('../views/FactoryListView.vue') },
   { path: '/factories/new', component: () => import('../views/FactoryDetailView.vue') },
+  { path: '/factories/dept/:craft', component: () => import('../views/DeptFactoriesView.vue') },
   { path: '/factories/:id', component: () => import('../views/FactoryDetailView.vue') },
   { path: '/factories/:id/score/:month', component: () => import('../views/ScoreSheetView.vue') },
   { path: '/monthly-output', component: () => import('../views/MonthlyOutputView.vue') },
