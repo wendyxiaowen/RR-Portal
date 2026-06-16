@@ -9,8 +9,14 @@ export interface Factory {
   address?: string
   workshop_area?: number
   workshop_info?: string
+  staff_count?: number
+  equipment_type?: string
+  equipment_qty?: number
+  processable_types?: string
+  annual_revenue?: number
   workshop_photos?: string[]
-  equipment_list?: string[]
+  // 设备清单：每种设备类型 + 对应数量
+  equipment_list?: { type: string; qty: number | null }[]
   qualification_files?: string[]
   qualification_expiry?: string
   status: FactoryStatus

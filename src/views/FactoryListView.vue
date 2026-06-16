@@ -30,11 +30,14 @@ function exportExcel() {
     电话: f.contact_phone ?? '',
     地址: f.address ?? '',
     '厂房面积(㎡)': f.workshop_area ?? '',
-    厂房基本信息: f.workshop_info ?? '',
+    人员: f.staff_count ?? '',
+    '设备(类型×数量)': (f.equipment_list ?? []).map((e) => (e.qty ? `${e.type}×${e.qty}` : e.type)).join('，'),
+    可加工类型: f.processable_types ?? '',
+    年生意额: f.annual_revenue ?? '',
     资质有效期: f.qualification_expiry ? f.qualification_expiry.slice(0, 10) : '',
     '厂房图片/证书': (f.workshop_photos ?? []).join('，'),
   }))
-  const empty = { 名称: '', 部门: '', 联系人: '', 电话: '', 地址: '', '厂房面积(㎡)': '', 厂房基本信息: '', 资质有效期: '', '厂房图片/证书': '' }
+  const empty = { 名称: '', 部门: '', 联系人: '', 电话: '', 地址: '', '厂房面积(㎡)': '', 人员: '', '设备(类型×数量)': '', 可加工类型: '', 年生意额: '', 资质有效期: '', '厂房图片/证书': '' }
   const ws = XLSX.utils.json_to_sheet(data.length ? data : [empty])
   const wb = XLSX.utils.book_new()
   XLSX.utils.book_append_sheet(wb, ws, '工厂信息')
@@ -59,9 +62,23 @@ async function importExcel(ev: Event) {
     fd.append('contact_person', String(r['联系人'] ?? ''))
     fd.append('contact_phone', String(r['电话'] ?? r['联系电话'] ?? ''))
     fd.append('address', String(r['地址'] ?? ''))
-    fd.append('workshop_info', String(r['厂房基本信息'] ?? ''))
+    fd.append('processable_types', String(r['可加工类型'] ?? ''))
     const area = r['厂房面积(㎡)'] ?? r['厂房面积']
     if (area != null && area !== '') fd.append('workshop_area', String(area))
+    for (const [col, key] of [['人员', 'staff_count'], ['年生意额', 'annual_revenue']] as const) {
+      const v = r[col]
+      if (v != null && v !== '') fd.append(key, String(v))
+    }
+    // 设备(类型×数量)：解析 "注塑机×3，喷涂线×2"
+    const equipRaw = String(r['设备(类型×数量)'] ?? r['设备类型'] ?? '').trim()
+    if (equipRaw) {
+      const list = equipRaw.split(/[，,]/).map((s) => s.trim()).filter(Boolean).map((seg) => {
+        const m = seg.split(/[×x*]/)
+        return { type: m[0].trim(), qty: m[1] ? Number(m[1]) : null }
+      })
+      fd.append('equipment_list', JSON.stringify(list))
+      fd.append('equipment_type', list.map((e) => e.type).join(','))
+    }
     const exp = r['资质有效期']
     if (exp instanceof Date) fd.append('qualification_expiry', exp.toISOString())
     else if (exp != null && exp !== '') fd.append('qualification_expiry', String(exp))
