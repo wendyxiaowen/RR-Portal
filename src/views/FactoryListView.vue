@@ -38,7 +38,7 @@ const cards = computed(() =>
   <AppLayout>
     <div class="page">
       <div class="toolbar">
-        <h2 style="margin:0">工厂管理</h2>
+        <h2 style="margin:0">工厂信息管理</h2>
         <span class="muted">共 {{ visible.length }} 家 · {{ cards.length }} 个部门</span>
         <span class="spacer"></span>
         <RouterLink to="/factories/new"><button>+ 新增工厂</button></RouterLink>
