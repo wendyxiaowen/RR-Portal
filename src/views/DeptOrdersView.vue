@@ -53,10 +53,6 @@ async function changeDelayDays(o: Order, ev: Event) {
 async function changeDelayReason(o: Order, ev: Event) {
   await orders.update(o.id, { delay_reason: (ev.target as HTMLInputElement).value })
 }
-async function changeDefect(o: Order, ev: Event) {
-  const raw = (ev.target as HTMLInputElement).value
-  await orders.update(o.id, { defect_rate: raw === '' ? undefined : Number(raw) })
-}
 function factoryName(o: Order) { return o.expand?.factory?.name ?? '-' }
 </script>
 <template>
@@ -77,7 +73,7 @@ function factoryName(o: Order) { return o.expand?.factory?.name ?? '-' }
       </div>
 
       <table>
-        <thead><tr><th>工厂</th><th>工序</th><th>货号</th><th>产品</th><th>数量</th><th>单价</th><th>金额</th><th>下单日期</th><th>交货日期</th><th>是否延期</th><th>延期天数</th><th>主要延期原因</th><th>状态</th><th>次品率</th><th>备注</th></tr></thead>
+        <thead><tr><th>工厂</th><th>工序</th><th>货号</th><th>产品</th><th>数量</th><th>单价</th><th>金额</th><th>下单日期</th><th>交货日期</th><th>是否延期</th><th>延期天数</th><th>主要延期原因</th><th>状态</th><th>备注</th></tr></thead>
         <tbody>
           <tr v-for="o in deptOrders" :key="o.id">
             <td>{{ factoryName(o) }}</td>
@@ -104,16 +100,10 @@ function factoryName(o: Order) { return o.expand?.factory?.name ?? '-' }
               </select>
             </td>
             <td>
-              <span class="defect-cell">
-                <input class="defect-input" :value="o.defect_rate ?? ''" type="number" min="0" step="0.1"
-                  placeholder="-" @change="changeDefect(o, $event)" /><span class="pct">%</span>
-              </span>
-            </td>
-            <td>
               <input class="notes-input" :value="o.notes ?? ''" placeholder="备注" @change="changeNotes(o, $event)" />
             </td>
           </tr>
-          <tr v-if="!deptOrders.length"><td colspan="15" class="hint" style="text-align:center">该部门暂无订单</td></tr>
+          <tr v-if="!deptOrders.length"><td colspan="14" class="hint" style="text-align:center">该部门暂无订单</td></tr>
         </tbody>
       </table>
     </div>

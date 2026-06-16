@@ -51,7 +51,6 @@ async function submit() {
           <label>数量 <input v-model.number="draft.quantity" type="number" min="0" /></label>
           <label>单价 <input v-model.number="draft.unit_price" type="number" min="0" step="0.01" /></label>
           <label>金额 <input :value="draftAmount" type="number" disabled /></label>
-          <label>次品率(%) <input v-model.number="draft.defect_rate" type="number" min="0" step="0.1" /></label>
           <label>下单日期 <input v-model="draft.order_date" type="date" /></label>
           <label>交货日期 <input v-model="draft.delivery_date" type="date" /></label>
           <label>备注 <input v-model="draft.notes" placeholder="可选" /></label>
