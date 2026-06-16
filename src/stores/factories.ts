@@ -30,5 +30,8 @@ export const useFactoriesStore = defineStore('factories', () => {
   async function update(id: string, data: Partial<Factory> | FormData) {
     return pb.collection('factories').update<Factory>(id, data)
   }
-  return { items, loading, fetchAll, get, create, update }
+  async function remove(id: string) {
+    return pb.collection('factories').delete(id)
+  }
+  return { items, loading, fetchAll, get, create, update, remove }
 })
