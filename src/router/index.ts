@@ -14,6 +14,7 @@ const routes: RouteRecordRaw[] = [
   { path: '/orders', component: () => import('../views/OrdersView.vue') },
   { path: '/orders/dept/:craft', component: () => import('../views/DeptOrdersView.vue') },
   { path: '/orders/dept/:craft/new', component: () => import('../views/OrderFormView.vue') },
+  { path: '/order-tracking', component: () => import('../views/OrderTrackingView.vue') },
   { path: '/monthly-output', component: () => import('../views/MonthlyOutputView.vue') },
   { path: '/review/:month', component: () => import('../views/ReviewBoardView.vue') },
   { path: '/review/:month/meeting', component: () => import('../views/ReviewMeetingView.vue') },
