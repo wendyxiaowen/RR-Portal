@@ -16,6 +16,7 @@ const auth = useAuthStore()
 
 const isNew = route.path.endsWith('/new')
 const factory = ref<Partial<Factory>>({})
+const ready = ref(isNew) // 新建立即可渲染；编辑需等数据加载完再渲染表单
 const newStatus = ref<FactoryStatus>('active')
 
 const photoInput = ref<HTMLInputElement | null>(null)
@@ -33,6 +34,7 @@ const statusLabel: Record<string, string> = {
 onMounted(async () => {
   if (!isNew) {
     factory.value = await store.get(route.params.id as string)
+    ready.value = true // 数据到位后再渲染表单，确保回填已有内容
     await incidents.fetchByFactory(route.params.id as string)
   }
 })
@@ -80,7 +82,10 @@ async function approveStatus() {
   <AppLayout>
     <div class="page detail">
     <h2>{{ isNew ? '新增工厂' : factory.name }}</h2>
-    <section class="card"><FactoryForm :model-value="factory" @save="onSave" /></section>
+    <section class="card">
+      <FactoryForm v-if="ready" :model-value="factory" @save="onSave" />
+      <p v-else class="muted">加载中…</p>
+    </section>
 
     <section v-if="!isNew" class="card status-box">
       <h3>合作状态</h3>
