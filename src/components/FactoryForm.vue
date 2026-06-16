@@ -63,9 +63,9 @@ function onSubmit() {
     <label>厂房基本信息
       <textarea v-model="form.workshop_info" rows="3" placeholder="厂房规模、产线数量、主要设备、人员配置等"></textarea>
     </label>
-    <label>厂房图片
-      <input ref="photoInput" type="file" multiple accept="image/*" />
-      <span class="hint" v-if="modelValue.id">重新上传将替换原有图片</span>
+    <label>厂房图片/证书
+      <input ref="photoInput" type="file" multiple accept="image/*,.pdf" />
+      <span class="hint" v-if="modelValue.id">重新上传将替换原有文件</span>
     </label>
     <div v-if="existingPhotos.length" class="thumbs">
       <img v-for="(u, i) in existingPhotos" :key="i" :src="u" alt="厂房图片" />

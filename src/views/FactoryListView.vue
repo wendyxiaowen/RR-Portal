@@ -1,17 +1,79 @@
 <script setup lang="ts">
-import { onMounted, computed } from 'vue'
+import { onMounted, computed, ref } from 'vue'
 import { RouterLink } from 'vue-router'
+import * as XLSX from 'xlsx'
 import AppLayout from '../components/AppLayout.vue'
 import { useFactoriesStore, filterByCraft } from '../stores/factories'
 import { useAuthStore } from '../stores/auth'
 import { visibleCraft } from '../utils/permissions'
-import type { Craft } from '../constants/roles'
+import { CRAFT_LABELS, type Craft } from '../constants/roles'
 import type { Factory } from '../types/factory'
 
 const store = useFactoriesStore()
 const auth = useAuthStore()
+const fileInput = ref<HTMLInputElement | null>(null)
 
 onMounted(() => store.fetchAll())
+
+// 部门名 → craft（同时接受「注塑部」「注塑」两种写法）
+const DEPT_TO_CRAFT: Record<string, Craft> = {}
+for (const [craft, label] of Object.entries(CRAFT_LABELS)) {
+  DEPT_TO_CRAFT[label] = craft as Craft
+  DEPT_TO_CRAFT[label.replace('部', '')] = craft as Craft
+}
+
+function exportExcel() {
+  const data = visible.value.map((f) => ({
+    名称: f.name,
+    部门: CRAFT_LABELS[f.craft],
+    联系人: f.contact_person ?? '',
+    电话: f.contact_phone ?? '',
+    地址: f.address ?? '',
+    '厂房面积(㎡)': f.workshop_area ?? '',
+    厂房基本信息: f.workshop_info ?? '',
+    资质有效期: f.qualification_expiry ? f.qualification_expiry.slice(0, 10) : '',
+    '厂房图片/证书': (f.workshop_photos ?? []).join('，'),
+  }))
+  const empty = { 名称: '', 部门: '', 联系人: '', 电话: '', 地址: '', '厂房面积(㎡)': '', 厂房基本信息: '', 资质有效期: '', '厂房图片/证书': '' }
+  const ws = XLSX.utils.json_to_sheet(data.length ? data : [empty])
+  const wb = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(wb, ws, '工厂信息')
+  XLSX.writeFile(wb, '工厂信息.xlsx')
+}
+
+async function importExcel(ev: Event) {
+  const file = (ev.target as HTMLInputElement).files?.[0]
+  if (!file) return
+  const buf = await file.arrayBuffer()
+  const wb = XLSX.read(buf, { cellDates: true })
+  const rows = XLSX.utils.sheet_to_json<Record<string, any>>(wb.Sheets[wb.SheetNames[0]])
+  let ok = 0, fail = 0
+  for (const r of rows) {
+    const name = String(r['名称'] ?? r['工厂名称'] ?? r['name'] ?? '').trim()
+    const deptRaw = String(r['部门'] ?? r['工艺'] ?? '').trim()
+    const craft = DEPT_TO_CRAFT[deptRaw]
+    if (!name || !craft) { fail++; continue }
+    const fd = new FormData()
+    fd.append('name', name)
+    fd.append('craft', craft)
+    fd.append('contact_person', String(r['联系人'] ?? ''))
+    fd.append('contact_phone', String(r['电话'] ?? r['联系电话'] ?? ''))
+    fd.append('address', String(r['地址'] ?? ''))
+    fd.append('workshop_info', String(r['厂房基本信息'] ?? ''))
+    const area = r['厂房面积(㎡)'] ?? r['厂房面积']
+    if (area != null && area !== '') fd.append('workshop_area', String(area))
+    const exp = r['资质有效期']
+    if (exp instanceof Date) fd.append('qualification_expiry', exp.toISOString())
+    else if (exp != null && exp !== '') fd.append('qualification_expiry', String(exp))
+    fd.append('status', 'active')
+    if (auth.userId) fd.append('created_by', auth.userId)
+    // 注：厂房图片/证书为文件，无法从 Excel 单元格导入，请在工厂详情页单独上传
+    try { await store.create(fd); ok++ } catch { fail++ }
+  }
+  await store.fetchAll()
+  if (fileInput.value) fileInput.value.value = ''
+  alert(`导入完成：成功 ${ok} 家` + (fail ? `，失败 ${fail} 家（缺名称或部门无法识别）` : '') + '\n（厂房图片/证书为文件，需在工厂详情页单独上传）')
+}
 
 const visible = computed(() =>
   filterByCraft(store.items, auth.role ? visibleCraft(auth.role) : null),
@@ -41,6 +103,9 @@ const cards = computed(() =>
         <h2 style="margin:0">工厂信息管理</h2>
         <span class="muted">共 {{ visible.length }} 家 · {{ cards.length }} 个部门</span>
         <span class="spacer"></span>
+        <button class="ghost" @click="exportExcel">导出 Excel</button>
+        <button class="ghost" @click="fileInput?.click()">导入 Excel</button>
+        <input ref="fileInput" type="file" accept=".xlsx,.xls,.csv" style="display:none" @change="importExcel" />
         <RouterLink to="/factories/new"><button>+ 新增工厂</button></RouterLink>
       </div>
 
