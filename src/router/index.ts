@@ -17,6 +17,7 @@ const routes: RouteRecordRaw[] = [
   { path: '/review/:month', component: () => import('../views/ReviewBoardView.vue') },
   { path: '/review/:month/meeting', component: () => import('../views/ReviewMeetingView.vue') },
   { path: '/kpi', component: () => import('../views/KpiBoardView.vue') },
+  { path: '/scoring', component: () => import('../views/MonthlyScoringView.vue') },
   { path: '/admin/score-templates', component: () => import('../views/admin/ScoreTemplateAdminView.vue'), meta: { adminOnly: true } },
   { path: '/admin/users', component: () => import('../views/admin/UserAdminView.vue'), meta: { adminOnly: true } },
 ]
