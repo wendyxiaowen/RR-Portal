@@ -12,6 +12,8 @@ export interface Order {
   order_date?: string
   delivery_date?: string
   status?: OrderStatus
+  current_product?: string
+  progress?: number
   is_delayed?: boolean
   delay_days?: number
   delay_reason?: string
@@ -19,6 +21,7 @@ export interface Order {
   defect_count?: number
   is_resolved?: boolean
   quality_issues?: string
+  manager_rating?: number
   notes?: string
   created_by?: string
   expand?: { factory?: { name: string; craft: string } }

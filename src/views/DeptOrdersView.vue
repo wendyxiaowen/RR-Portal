@@ -42,6 +42,13 @@ async function changeNotes(o: Order, ev: Event) {
   const v = (ev.target as HTMLInputElement).value
   await orders.update(o.id, { notes: v })
 }
+async function changeCurrentProduct(o: Order, ev: Event) {
+  await orders.update(o.id, { current_product: (ev.target as HTMLInputElement).value })
+}
+async function changeProgress(o: Order, ev: Event) {
+  const raw = (ev.target as HTMLInputElement).value
+  await orders.update(o.id, { progress: raw === '' ? undefined : Number(raw) })
+}
 async function changeDelayed(o: Order, ev: Event) {
   await orders.update(o.id, { is_delayed: (ev.target as HTMLSelectElement).value === 'true' })
   await load()
@@ -57,7 +64,7 @@ function factoryName(o: Order) { return o.expand?.factory?.name ?? '-' }
 </script>
 <template>
   <AppLayout>
-    <div class="page">
+    <div class="page wide">
       <div class="toolbar">
         <RouterLink to="/orders" class="back">← 部门</RouterLink>
         <h2 style="margin:0">{{ deptName }} · 下单明细</h2>
@@ -73,7 +80,7 @@ function factoryName(o: Order) { return o.expand?.factory?.name ?? '-' }
       </div>
 
       <table>
-        <thead><tr><th>工厂</th><th>工序</th><th>货号</th><th>产品</th><th>数量</th><th>单价</th><th>金额</th><th>下单日期</th><th>交货日期</th><th>是否延期</th><th>延期天数</th><th>主要延期原因</th><th>状态</th><th>备注</th></tr></thead>
+        <thead><tr><th>工厂</th><th>工序</th><th>货号</th><th>产品</th><th>数量</th><th>单价</th><th>金额</th><th>下单日期</th><th>交货日期</th><th>当前在生产产品</th><th>生产完成进度</th><th>是否延期</th><th>延期天数</th><th>主要延期原因</th><th>状态</th><th>备注</th></tr></thead>
         <tbody>
           <tr v-for="o in deptOrders" :key="o.id">
             <td>{{ factoryName(o) }}</td>
@@ -85,6 +92,12 @@ function factoryName(o: Order) { return o.expand?.factory?.name ?? '-' }
             <td>{{ o.amount != null ? o.amount.toLocaleString() : '-' }}</td>
             <td>{{ o.order_date ? o.order_date.slice(0,10) : '-' }}</td>
             <td>{{ o.delivery_date ? o.delivery_date.slice(0,10) : '-' }}</td>
+            <td><input class="cur-input" :value="o.current_product ?? ''" placeholder="产品" @change="changeCurrentProduct(o, $event)" /></td>
+            <td>
+              <span class="prog-cell">
+                <input class="num-input" :value="o.progress ?? ''" type="number" min="0" max="100" placeholder="-" @change="changeProgress(o, $event)" /><span class="pct">%</span>
+              </span>
+            </td>
             <td>
               <select class="delay-sel" :value="String(o.is_delayed ?? false)" @change="changeDelayed(o, $event)">
                 <option value="false">否</option>
@@ -103,13 +116,14 @@ function factoryName(o: Order) { return o.expand?.factory?.name ?? '-' }
               <input class="notes-input" :value="o.notes ?? ''" placeholder="备注" @change="changeNotes(o, $event)" />
             </td>
           </tr>
-          <tr v-if="!deptOrders.length"><td colspan="14" class="hint" style="text-align:center">该部门暂无订单</td></tr>
+          <tr v-if="!deptOrders.length"><td colspan="16" class="hint" style="text-align:center">该部门暂无订单</td></tr>
         </tbody>
       </table>
     </div>
   </AppLayout>
 </template>
 <style scoped>
+.wide { max-width: none; } /* 宽表铺满，避免左侧大片留白 */
 .back { font-size: .9rem; }
 .form-card { margin-bottom: 1.25rem; }
 .order-form { display: flex; gap: .75rem; flex-wrap: wrap; align-items: flex-end; }
@@ -119,7 +133,7 @@ function factoryName(o: Order) { return o.expand?.factory?.name ?? '-' }
 .delay-sel { padding: .25rem .4rem; font-size: .82rem; }
 .num-input { width: 56px; padding: .3rem .4rem; font-size: .85rem; }
 .reason-input { width: 120px; padding: .3rem .5rem; font-size: .85rem; }
-.defect-cell { display: inline-flex; align-items: center; gap: 2px; }
-.defect-input { width: 56px; padding: .3rem .4rem; font-size: .85rem; }
+.cur-input { width: 110px; padding: .3rem .5rem; font-size: .85rem; }
+.prog-cell { display: inline-flex; align-items: center; gap: 2px; }
 .pct { color: var(--text-soft); font-size: .82rem; }
 </style>
