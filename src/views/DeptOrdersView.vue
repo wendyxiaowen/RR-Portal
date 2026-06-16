@@ -3,15 +3,11 @@ import { ref, onMounted, computed } from 'vue'
 import { useRoute, RouterLink } from 'vue-router'
 import AppLayout from '../components/AppLayout.vue'
 import { useOrdersStore } from '../stores/orders'
-import { useFactoriesStore } from '../stores/factories'
-import { useAuthStore } from '../stores/auth'
 import { CRAFT_LABELS, type Craft } from '../constants/roles'
 import type { Order, OrderStatus } from '../types/order'
 
 const route = useRoute()
 const orders = useOrdersStore()
-const factories = useFactoriesStore()
-const auth = useAuthStore()
 
 const craft = computed(() => route.params.craft as Craft)
 const deptName = computed(() => CRAFT_LABELS[craft.value] ?? '部门')
@@ -26,10 +22,6 @@ const STATUS: { value: OrderStatus; label: string; cls: string }[] = [
 ]
 const statusMeta = (s?: string) => STATUS.find((x) => x.value === s)
 
-const draft = ref<Partial<Order>>({ status: 'placed' })
-
-// 本部门工厂（下单可选）
-const deptFactories = computed(() => factories.items.filter((f) => f.craft === craft.value))
 // 本部门订单
 const deptOrders = computed(() =>
   orders.items.filter((o) => o.expand?.factory?.craft === craft.value)
@@ -37,19 +29,10 @@ const deptOrders = computed(() =>
 )
 
 async function load() {
-  await Promise.all([orders.fetchAll(), factories.fetchAll()])
+  await orders.fetchAll()
 }
 onMounted(load)
 
-// 金额自动 = 数量 × 单价
-const draftAmount = computed(() => (Number(draft.value.quantity) || 0) * (Number(draft.value.unit_price) || 0))
-
-async function submit() {
-  if (!draft.value.factory || !draft.value.product) return
-  await orders.create({ ...draft.value, amount: draftAmount.value, created_by: auth.userId ?? undefined })
-  draft.value = { status: 'placed' }
-  await load()
-}
 async function changeStatus(o: Order, ev: Event) {
   const v = (ev.target as HTMLSelectElement).value as OrderStatus
   await orders.update(o.id, { status: v })
@@ -72,6 +55,7 @@ function factoryName(o: Order) { return o.expand?.factory?.name ?? '-' }
         <RouterLink to="/orders" class="back">← 部门</RouterLink>
         <h2 style="margin:0">{{ deptName }} · 下单明细</h2>
         <span class="muted">共 {{ deptOrders.length }} 单</span>
+        <RouterLink :to="`/orders/dept/${craft}/new`"><button>+ 新增下单</button></RouterLink>
         <span class="spacer"></span>
         <label>状态
           <select v-model="statusFilter">
@@ -80,29 +64,6 @@ function factoryName(o: Order) { return o.expand?.factory?.name ?? '-' }
           </select>
         </label>
       </div>
-
-      <section class="card form-card">
-        <h3>新增下单</h3>
-        <form class="order-form" @submit.prevent="submit">
-          <label>工厂
-            <select v-model="draft.factory" required>
-              <option disabled value="">选择工厂</option>
-              <option v-for="f in deptFactories" :key="f.id" :value="f.id">{{ f.name }}</option>
-            </select>
-          </label>
-          <label>工序 <input v-model="draft.process" placeholder="如注塑/喷油" /></label>
-          <label>货号 <input v-model="draft.item_no" placeholder="货号" /></label>
-          <label>产品 <input v-model="draft.product" placeholder="产品名称" required /></label>
-          <label>数量 <input v-model.number="draft.quantity" type="number" min="0" /></label>
-          <label>单价 <input v-model.number="draft.unit_price" type="number" min="0" step="0.01" /></label>
-          <label>金额 <input :value="draftAmount" type="number" disabled /></label>
-          <label>次品率(%) <input v-model.number="draft.defect_rate" type="number" min="0" step="0.1" /></label>
-          <label>下单日期 <input v-model="draft.order_date" type="date" /></label>
-          <label>交货日期 <input v-model="draft.delivery_date" type="date" /></label>
-          <label>备注 <input v-model="draft.notes" placeholder="可选" /></label>
-          <button type="submit">提交下单</button>
-        </form>
-      </section>
 
       <table>
         <thead><tr><th>工厂</th><th>工序</th><th>货号</th><th>产品</th><th>数量</th><th>单价</th><th>金额</th><th>下单日期</th><th>交货日期</th><th>状态</th><th>次品率</th><th>备注</th></tr></thead>

@@ -13,6 +13,7 @@ const routes: RouteRecordRaw[] = [
   { path: '/factories/:id/score/:month', component: () => import('../views/ScoreSheetView.vue') },
   { path: '/orders', component: () => import('../views/OrdersView.vue') },
   { path: '/orders/dept/:craft', component: () => import('../views/DeptOrdersView.vue') },
+  { path: '/orders/dept/:craft/new', component: () => import('../views/OrderFormView.vue') },
   { path: '/monthly-output', component: () => import('../views/MonthlyOutputView.vue') },
   { path: '/review/:month', component: () => import('../views/ReviewBoardView.vue') },
   { path: '/review/:month/meeting', component: () => import('../views/ReviewMeetingView.vue') },
