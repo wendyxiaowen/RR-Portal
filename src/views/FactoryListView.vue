@@ -32,12 +32,13 @@ function exportExcel() {
     '厂房面积(㎡)': f.workshop_area ?? '',
     人员: f.staff_count ?? '',
     '设备(类型×数量)': (f.equipment_list ?? []).map((e) => (e.qty ? `${e.type}×${e.qty}` : e.type)).join('，'),
+    '帮我们生产的设备/生产线': f.production_lines ?? '',
     可加工类型: f.processable_types ?? '',
     年生意额: f.annual_revenue ?? '',
     '环评/消防/安监资质': f.has_certs ? '是' : '否',
     '厂房图片/证书': (f.workshop_photos ?? []).join('，'),
   }))
-  const empty = { 名称: '', 部门: '', 联系人: '', 电话: '', 地址: '', '厂房面积(㎡)': '', 人员: '', '设备(类型×数量)': '', 可加工类型: '', 年生意额: '', '环评/消防/安监资质': '', '厂房图片/证书': '' }
+  const empty = { 名称: '', 部门: '', 联系人: '', 电话: '', 地址: '', '厂房面积(㎡)': '', 人员: '', '设备(类型×数量)': '', '帮我们生产的设备/生产线': '', 可加工类型: '', 年生意额: '', '环评/消防/安监资质': '', '厂房图片/证书': '' }
   const ws = XLSX.utils.json_to_sheet(data.length ? data : [empty])
   const wb = XLSX.utils.book_new()
   XLSX.utils.book_append_sheet(wb, ws, '工厂信息')
@@ -63,6 +64,7 @@ async function importExcel(ev: Event) {
     fd.append('contact_phone', String(r['电话'] ?? r['联系电话'] ?? ''))
     fd.append('address', String(r['地址'] ?? ''))
     fd.append('processable_types', String(r['可加工类型'] ?? ''))
+    fd.append('production_lines', String(r['帮我们生产的设备/生产线'] ?? ''))
     const area = r['厂房面积(㎡)'] ?? r['厂房面积']
     if (area != null && area !== '') fd.append('workshop_area', String(area))
     for (const [col, key] of [['人员', 'staff_count'], ['年生意额', 'annual_revenue']] as const) {

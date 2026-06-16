@@ -58,6 +58,7 @@ function onSubmit() {
   const totalQty = cleanEquip.reduce((s, e) => s + (Number(e.qty) || 0), 0)
   if (totalQty) fd.append('equipment_qty', String(totalQty))
   fd.append('processable_types', form.processable_types ?? '')
+  fd.append('production_lines', form.production_lines ?? '')
   for (const k of ['staff_count', 'annual_revenue'] as const) {
     const v = form[k]
     if (v != null && v !== ('' as any)) fd.append(k, String(v))
@@ -86,7 +87,7 @@ function onSubmit() {
       <legend>厂房基本信息</legend>
       <label>人员(人) <input v-model.number="form.staff_count" type="number" min="0" /></label>
       <div class="equip-block">
-        <span class="equip-title">设备（类型 + 数量，可添加多种）</span>
+        <span class="equip-title">设备/生产线（类型 + 数量，可添加多种）</span>
         <div v-if="equipList.length" class="equip-head"><span>设备类型</span><span>数量</span><span></span></div>
         <div v-for="(e, i) in equipList" :key="i" class="equip-row">
           <input v-model="e.type" placeholder="如注塑机" />
@@ -95,6 +96,7 @@ function onSubmit() {
         </div>
         <button type="button" class="ghost mini add" @click="addEquipRow">+ 添加设备</button>
       </div>
+      <label>帮我们生产的设备/生产线 <input v-model="form.production_lines" placeholder="如：2 条移印线、1 条喷涂线专供我司" /></label>
       <label>可加工类型 <input v-model="form.processable_types" placeholder="如 ABS/PC 注塑、金属喷涂" /></label>
       <label>年生意额(万) <input v-model.number="form.annual_revenue" type="number" min="0" /></label>
     </fieldset>

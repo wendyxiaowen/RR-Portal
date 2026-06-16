@@ -13,6 +13,7 @@ export interface Factory {
   equipment_type?: string
   equipment_qty?: number
   processable_types?: string
+  production_lines?: string
   annual_revenue?: number
   workshop_photos?: string[]
   // 设备清单：每种设备类型 + 对应数量
