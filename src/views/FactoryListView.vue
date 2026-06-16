@@ -34,10 +34,10 @@ function exportExcel() {
     '设备(类型×数量)': (f.equipment_list ?? []).map((e) => (e.qty ? `${e.type}×${e.qty}` : e.type)).join('，'),
     可加工类型: f.processable_types ?? '',
     年生意额: f.annual_revenue ?? '',
-    资质有效期: f.qualification_expiry ? f.qualification_expiry.slice(0, 10) : '',
+    '环评/消防/安监资质': f.has_certs ? '是' : '否',
     '厂房图片/证书': (f.workshop_photos ?? []).join('，'),
   }))
-  const empty = { 名称: '', 部门: '', 联系人: '', 电话: '', 地址: '', '厂房面积(㎡)': '', 人员: '', '设备(类型×数量)': '', 可加工类型: '', 年生意额: '', 资质有效期: '', '厂房图片/证书': '' }
+  const empty = { 名称: '', 部门: '', 联系人: '', 电话: '', 地址: '', '厂房面积(㎡)': '', 人员: '', '设备(类型×数量)': '', 可加工类型: '', 年生意额: '', '环评/消防/安监资质': '', '厂房图片/证书': '' }
   const ws = XLSX.utils.json_to_sheet(data.length ? data : [empty])
   const wb = XLSX.utils.book_new()
   XLSX.utils.book_append_sheet(wb, ws, '工厂信息')
@@ -79,9 +79,8 @@ async function importExcel(ev: Event) {
       fd.append('equipment_list', JSON.stringify(list))
       fd.append('equipment_type', list.map((e) => e.type).join(','))
     }
-    const exp = r['资质有效期']
-    if (exp instanceof Date) fd.append('qualification_expiry', exp.toISOString())
-    else if (exp != null && exp !== '') fd.append('qualification_expiry', String(exp))
+    const certs = String(r['环评/消防/安监资质'] ?? '').trim()
+    if (certs) fd.append('has_certs', /^(是|有|y|yes|true|1)$/i.test(certs) ? 'true' : 'false')
     fd.append('status', 'active')
     if (auth.userId) fd.append('created_by', auth.userId)
     // 注：厂房图片/证书为文件，无法从 Excel 单元格导入，请在工厂详情页单独上传

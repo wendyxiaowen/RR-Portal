@@ -62,8 +62,8 @@ function onSubmit() {
     const v = form[k]
     if (v != null && v !== ('' as any)) fd.append(k, String(v))
   }
-  if (canEditQual.value && form.qualification_expiry) {
-    fd.append('qualification_expiry', form.qualification_expiry)
+  if (canEditQual.value) {
+    fd.append('has_certs', form.has_certs ? 'true' : 'false')
   }
   const files = photoInput.value?.files
   if (files) for (const f of Array.from(files)) fd.append('workshop_photos', f)
@@ -105,8 +105,11 @@ function onSubmit() {
     <div v-if="existingPhotos.length" class="thumbs">
       <img v-for="(u, i) in existingPhotos" :key="i" :src="u" alt="厂房图片" />
     </div>
-    <label>资质有效期
-      <input v-model="form.qualification_expiry" type="date" :disabled="!canEditQual" />
+    <label>环评 / 消防 / 安监资质
+      <select v-model="form.has_certs" :disabled="!canEditQual">
+        <option :value="false">否</option>
+        <option :value="true">是</option>
+      </select>
     </label>
     <p v-if="!canEditQual" class="hint">资质信息仅供应链经理/管理员可修改</p>
     <button type="submit">保存</button>

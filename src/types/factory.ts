@@ -19,6 +19,7 @@ export interface Factory {
   equipment_list?: { type: string; qty: number | null }[]
   qualification_files?: string[]
   qualification_expiry?: string
+  has_certs?: boolean
   status: FactoryStatus
   status_pending?: FactoryStatus | ''
   status_updated_by?: string
