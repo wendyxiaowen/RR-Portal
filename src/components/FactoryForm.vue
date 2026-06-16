@@ -96,7 +96,7 @@ function onSubmit() {
         <button type="button" class="ghost mini add" @click="addEquipRow">+ 添加设备</button>
       </div>
       <label>可加工类型 <input v-model="form.processable_types" placeholder="如 ABS/PC 注塑、金属喷涂" /></label>
-      <label>年生意额(元) <input v-model.number="form.annual_revenue" type="number" min="0" /></label>
+      <label>年生意额(万) <input v-model.number="form.annual_revenue" type="number" min="0" /></label>
     </fieldset>
     <label>厂房图片/证书
       <input ref="photoInput" type="file" multiple accept="image/*,.pdf" />
