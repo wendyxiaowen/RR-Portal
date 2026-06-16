@@ -13,6 +13,39 @@ const output = useOutputStore()
 const orders = useOrdersStore()
 const auth = useAuthStore()
 const drafts = ref<Record<string, { source_doc?: string }>>({})
+const search = ref('')
+const deptFilter = ref('')
+
+// 按部门/工厂名搜索过滤
+const filteredFactories = computed(() => {
+  const kw = search.value.trim().toLowerCase()
+  return factories.items.filter((f) => {
+    if (deptFilter.value && f.craft !== deptFilter.value) return false
+    if (!kw) return true
+    return f.name.toLowerCase().includes(kw) || (CRAFT_LABELS[f.craft] ?? '').includes(kw)
+  })
+})
+
+function exportExcel() {
+  const header = ['工厂', '部门', '当月产值', '对账单号']
+  const rows = [header]
+  for (const f of filteredFactories.value) {
+    rows.push([
+      f.name,
+      CRAFT_LABELS[f.craft] ?? '',
+      String(outputByFactory.value[f.id] ?? 0),
+      drafts.value[f.id]?.source_doc ?? '',
+    ])
+  }
+  const csv = rows.map((r) => r.map((c) => `"${String(c ?? '').replace(/"/g, '""')}"`).join(',')).join('\n')
+  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `月度产值_${month.value}.csv`
+  a.click()
+  URL.revokeObjectURL(url)
+}
 
 // 各工厂当月产值 = 下单明细中 order_date 落在所选月份的订单金额之和（只读，自动汇总）
 const outputByFactory = computed(() => {
@@ -54,11 +87,18 @@ async function save(factoryId: string) {
       <label>月份 <input v-model="month" type="month" @change="load" /></label>
       <button @click="load">加载</button>
       <span class="muted">当月产值由「下单明细」订单金额自动汇总，不可手动修改</span>
+      <span class="spacer"></span>
+      <select v-model="deptFilter">
+        <option value="">全部部门</option>
+        <option v-for="(label, key) in CRAFT_LABELS" :key="key" :value="key">{{ label }}</option>
+      </select>
+      <input v-model="search" placeholder="搜索工厂 / 部门" />
+      <button class="ghost" @click="exportExcel">导出 Excel</button>
     </div>
     <table>
       <thead><tr><th>工厂</th><th>部门</th><th>当月产值（订单金额汇总）</th><th>对账单号</th><th></th></tr></thead>
       <tbody>
-        <tr v-for="f in factories.items" :key="f.id">
+        <tr v-for="f in filteredFactories" :key="f.id">
           <td>{{ f.name }}</td>
           <td class="muted">{{ CRAFT_LABELS[f.craft] }}</td>
           <td><span class="amount">{{ (outputByFactory[f.id] ?? 0).toLocaleString() }}</span></td>
