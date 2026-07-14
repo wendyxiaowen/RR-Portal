@@ -2,7 +2,10 @@
 import { RouterLink } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import { ROLE_LABELS } from '../constants/roles'
-import { canEditOutput, canEditTemplates } from '../utils/permissions'
+import {
+  canViewFactories, canViewFactoryAdmin, canViewOrders, canViewQuality, canViewOutput,
+  canViewScoring, canViewTemplates, canViewPriceStats, canViewSummary, canViewUsers,
+} from '../utils/permissions'
 
 const auth = useAuthStore()
 </script>
@@ -19,15 +22,16 @@ const auth = useAuthStore()
       <aside>
         <nav>
           <RouterLink to="/dashboard">首页</RouterLink>
-          <RouterLink to="/factories">工厂信息管理</RouterLink>
-          <RouterLink to="/orders">下单明细</RouterLink>
-          <RouterLink to="/order-tracking">品质管理</RouterLink>
-          <RouterLink v-if="auth.role && canEditOutput(auth.role)" to="/monthly-output">产值录入</RouterLink>
-          <RouterLink to="/kpi">KPI看板</RouterLink>
-          <RouterLink to="/scoring">工厂月度评分</RouterLink>
-          <RouterLink v-if="auth.role && canEditTemplates(auth.role)" to="/admin/score-templates">评分模板</RouterLink>
-          <RouterLink to="/summary">汇总表</RouterLink>
-          <RouterLink v-if="auth.role && canEditTemplates(auth.role)" to="/admin/users">用户</RouterLink>
+          <RouterLink v-if="auth.role && canViewFactories(auth.role)" to="/factories">工厂信息管理</RouterLink>
+          <RouterLink v-if="auth.role && canViewFactoryAdmin(auth.role)" to="/factory-view">加工厂管理</RouterLink>
+          <RouterLink v-if="auth.role && canViewOrders(auth.role)" to="/orders">货期管理</RouterLink>
+          <RouterLink v-if="auth.role && canViewQuality(auth.role)" to="/quality">品质管理</RouterLink>
+          <RouterLink v-if="auth.role && canViewOutput(auth.role)" to="/monthly-output">产值管理</RouterLink>
+          <RouterLink v-if="auth.role && canViewScoring(auth.role)" to="/scoring">工厂月度评分</RouterLink>
+          <RouterLink v-if="auth.role && canViewTemplates(auth.role)" to="/admin/score-templates">评分模板</RouterLink>
+          <RouterLink v-if="auth.role && canViewPriceStats(auth.role)" to="/price-stats">单价统计</RouterLink>
+          <RouterLink v-if="auth.role && canViewSummary(auth.role)" to="/summary">汇总表</RouterLink>
+          <RouterLink v-if="auth.role && canViewUsers(auth.role)" to="/admin/users">用户</RouterLink>
         </nav>
       </aside>
       <main><slot /></main>

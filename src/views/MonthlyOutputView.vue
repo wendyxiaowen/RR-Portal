@@ -5,7 +5,8 @@ import { useFactoriesStore } from '../stores/factories'
 import { useOutputStore } from '../stores/output'
 import { useOrdersStore } from '../stores/orders'
 import { useAuthStore } from '../stores/auth'
-import { CRAFT_LABELS } from '../constants/roles'
+import { allowedRegions } from '../utils/permissions'
+import { CRAFT_LABELS, REGION_LABELS, regionOf, type Region } from '../constants/roles'
 
 const month = ref(new Date().toISOString().slice(0, 7))
 const factories = useFactoriesStore()
@@ -15,11 +16,15 @@ const auth = useAuthStore()
 const drafts = ref<Record<string, { source_doc?: string }>>({})
 const search = ref('')
 const deptFilter = ref('')
+const myRegions = computed(() => (auth.role ? allowedRegions(auth.role) : ['dongguan', 'hunan', 'heyuan'] as Region[]))
+const regionFilter = ref<Region | ''>('')
 
-// 按部门/工厂名搜索过滤
+// 按厂区/部门/工厂名搜索过滤（受授权厂区限制）
 const filteredFactories = computed(() => {
   const kw = search.value.trim().toLowerCase()
   return factories.items.filter((f) => {
+    if (!myRegions.value.includes(regionOf(f))) return false
+    if (regionFilter.value && regionOf(f) !== regionFilter.value) return false
     if (deptFilter.value && f.craft !== deptFilter.value) return false
     if (!kw) return true
     return f.name.toLowerCase().includes(kw) || (CRAFT_LABELS[f.craft] ?? '').includes(kw)
@@ -27,11 +32,12 @@ const filteredFactories = computed(() => {
 })
 
 function exportExcel() {
-  const header = ['工厂', '部门', '当月产值', '对账单号']
+  const header = ['工厂', '厂区', '部门', '当月产值', '对账单号']
   const rows = [header]
   for (const f of filteredFactories.value) {
     rows.push([
       f.name,
+      REGION_LABELS[regionOf(f)],
       CRAFT_LABELS[f.craft] ?? '',
       String(outputByFactory.value[f.id] ?? 0),
       drafts.value[f.id]?.source_doc ?? '',
@@ -47,7 +53,7 @@ function exportExcel() {
   URL.revokeObjectURL(url)
 }
 
-// 各工厂当月产值 = 下单明细中 order_date 落在所选月份的订单金额之和（只读，自动汇总）
+// 各工厂当月产值 = 货期管理中 order_date 落在所选月份的订单金额之和（只读，自动汇总）
 const outputByFactory = computed(() => {
   const map: Record<string, number> = {}
   for (const o of orders.items) {
@@ -82,12 +88,16 @@ async function save(factoryId: string) {
 <template>
   <AppLayout>
     <div class="page">
-    <h2>月度产值录入</h2>
+    <h2>月度产值管理</h2>
     <div class="toolbar">
       <label>月份 <input v-model="month" type="month" @change="load" /></label>
       <button @click="load">加载</button>
-      <span class="muted">当月产值由「下单明细」订单金额自动汇总，不可手动修改</span>
+      <span class="muted">当月产值由「货期管理」订单金额自动汇总，不可手动修改</span>
       <span class="spacer"></span>
+      <select v-model="regionFilter">
+        <option value="">全部厂区</option>
+        <option v-for="rg in myRegions" :key="rg" :value="rg">{{ REGION_LABELS[rg] }}厂区</option>
+      </select>
       <select v-model="deptFilter">
         <option value="">全部部门</option>
         <option v-for="(label, key) in CRAFT_LABELS" :key="key" :value="key">{{ label }}</option>
@@ -96,10 +106,11 @@ async function save(factoryId: string) {
       <button class="ghost" @click="exportExcel">导出 Excel</button>
     </div>
     <table>
-      <thead><tr><th>工厂</th><th>部门</th><th>当月产值（订单金额汇总）</th><th>对账单号</th><th></th></tr></thead>
+      <thead><tr><th>工厂</th><th>厂区</th><th>部门</th><th>当月产值（订单金额汇总）</th><th>对账单号</th><th></th></tr></thead>
       <tbody>
         <tr v-for="f in filteredFactories" :key="f.id">
           <td>{{ f.name }}</td>
+          <td class="muted">{{ REGION_LABELS[regionOf(f)] }}</td>
           <td class="muted">{{ CRAFT_LABELS[f.craft] }}</td>
           <td><span class="amount">{{ (outputByFactory[f.id] ?? 0).toLocaleString() }}</span></td>
           <td><input v-model="(drafts[f.id] ??= {}).source_doc" placeholder="对账单号" /></td>

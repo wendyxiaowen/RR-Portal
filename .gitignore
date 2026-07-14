@@ -10,7 +10,9 @@ lerna-debug.log*
 node_modules
 dist
 dist-ssr
+pb_public
 *.local
+*.orig
 
 # PocketBase
 bin/

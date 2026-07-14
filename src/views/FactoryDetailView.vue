@@ -3,10 +3,14 @@ import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import AppLayout from '../components/AppLayout.vue'
 import FactoryForm from '../components/FactoryForm.vue'
+import { pb } from '../pb'
 import { useFactoriesStore } from '../stores/factories'
 import { useIncidentsStore } from '../stores/incidents'
 import { useAuthStore } from '../stores/auth'
+import { computeFactoryStats, computeSiteStats, type FactoryStats, type SiteStats } from '../utils/factoryStats'
+import { canEditFactories } from '../utils/permissions'
 import type { Factory, FactoryStatus } from '../types/factory'
+import type { Order } from '../types/order'
 
 const route = useRoute()
 const router = useRouter()
@@ -15,7 +19,11 @@ const incidents = useIncidentsStore()
 const auth = useAuthStore()
 
 const isNew = route.path.endsWith('/new')
-const factory = ref<Partial<Factory>>({})
+const factory = ref<Partial<Factory>>(
+  isNew
+    ? { craft: (route.query.craft as Factory['craft']) || undefined, region: (route.query.region as Factory['region']) || 'dongguan' }
+    : {},
+)
 const ready = ref(isNew) // 新建立即可渲染；编辑需等数据加载完再渲染表单
 const newStatus = ref<FactoryStatus>('active')
 
@@ -31,11 +39,26 @@ const statusLabel: Record<string, string> = {
   active: '正常', limited: '限单', suspended: '暂停', eliminated: '淘汰',
 }
 
+const stats = ref<FactoryStats | null>(null)
+const site = ref<SiteStats | null>(null)
+const grade = ref<string>('')
+
 onMounted(async () => {
   if (!isNew) {
-    factory.value = await store.get(route.params.id as string)
+    const id = route.params.id as string
+    factory.value = await store.get(id)
     ready.value = true // 数据到位后再渲染表单，确保回填已有内容
-    await incidents.fetchByFactory(route.params.id as string)
+    await incidents.fetchByFactory(id)
+    // 该工厂的价格/交期/品质指标(与汇总表一致)
+    const [os, qis, scores, checks] = await Promise.all([
+      pb.collection('orders').getFullList<Order>({ filter: `factory = "${id}"` }),
+      pb.collection('quality_inspections').getFullList({ filter: `factory = "${id}"` }),
+      pb.collection('monthly_scores').getFullList({ filter: `factory = "${id}"`, sort: '-year_month' }),
+      pb.collection('quality_5s_checks').getFullList({ filter: `factory = "${id}"`, sort: '-check_date' }),
+    ])
+    stats.value = computeFactoryStats(os, qis as any[])
+    site.value = computeSiteStats(checks as any[])
+    grade.value = (scores as any[]).find((s) => s.grade)?.grade ?? ''
   }
 })
 
@@ -82,9 +105,11 @@ async function approveStatus() {
   <AppLayout>
     <div class="page detail">
     <h2>{{ isNew ? '新增工厂' : factory.name }}</h2>
-    <section class="card">
-      <FactoryForm v-if="ready" :model-value="factory" @save="onSave" />
-      <p v-else class="muted">加载中…</p>
+    <section class="card info-row">
+      <div class="form-col">
+        <FactoryForm v-if="ready" :model-value="factory" :readonly="!(auth.role && canEditFactories(auth.role))" @save="onSave" />
+        <p v-else class="muted">加载中…</p>
+      </div>
     </section>
 
     <section v-if="!isNew" class="card status-box">
@@ -142,6 +167,17 @@ async function approveStatus() {
 </template>
 <style scoped>
 .detail { display: flex; flex-direction: column; gap: 1.25rem; }
+.info-row { display: flex; gap: 2rem; align-items: flex-start; }
+.form-col { flex: 0 0 auto; }
+.metrics-col { flex: 1; display: flex; flex-direction: column; gap: 1rem; min-width: 360px; }
+.m-row { display: flex; gap: 1rem; }
+.m-box { flex: 1; border: 1px solid var(--border); border-radius: var(--radius-sm); padding: .8rem 1rem; }
+.m-title { font-size: .9rem; font-weight: 600; color: var(--primary, #4f46e5); margin-bottom: .6rem; }
+.m-line { display: flex; justify-content: space-between; align-items: baseline; font-size: .88rem; margin: .35rem 0; }
+.m-line span { color: var(--text-soft); }
+.m-line b { font-weight: 600; }
+.m-line b.hl { color: var(--primary, #4f46e5); font-size: 1.05rem; }
+@media (max-width: 960px) { .info-row { flex-direction: column; } }
 .inc-form { display: flex; gap: .5rem; flex-wrap: wrap; align-items: center; margin-bottom: .75rem; }
 .incidents ul { margin: 0; padding-left: 1.1rem; }
 .incidents li { margin: .3rem 0; }

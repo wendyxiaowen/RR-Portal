@@ -1,12 +1,23 @@
 export type Role =
-  | 'admin' | 'sc_manager'
+  | 'admin' | 'gm' | 'sc_manager'
   | 'buyer_injection' | 'buyer_painting' | 'buyer_assembly' | 'buyer_sewing'
   | 'finance_cost' | 'finance_mgr' | 'quality_qc' | 'sc_clerk'
 
 export type Craft = 'injection' | 'painting' | 'assembly' | 'sewing'
 
+// 厂区（东莞为现有默认；湖南、河源为新增）
+export type Region = 'dongguan' | 'hunan' | 'heyuan'
+export const REGION_LABELS: Record<Region, string> = {
+  dongguan: '东莞', hunan: '湖南', heyuan: '河源',
+}
+export const REGIONS: Region[] = ['dongguan', 'hunan', 'heyuan']
+// 工厂的厂区（旧数据无 region 字段，一律归东莞）
+export function regionOf(f?: { region?: string | null; [k: string]: any } | null): Region {
+  return ((f?.region as Region) || 'dongguan')
+}
+
 export const ROLE_LABELS: Record<Role, string> = {
-  admin: '管理员', sc_manager: '供应链经理',
+  admin: '管理员', gm: '总经理', sc_manager: '供应链经理',
   buyer_injection: '注塑部采购', buyer_painting: '喷油部采购',
   buyer_assembly: '装配部采购', buyer_sewing: '车缝部采购',
   finance_cost: '财务成本会计', finance_mgr: '财务主管',

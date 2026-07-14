@@ -1,16 +1,21 @@
 <script setup lang="ts">
-import { onMounted, computed } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { RouterLink } from 'vue-router'
+import * as XLSX from 'xlsx'
 import AppLayout from '../components/AppLayout.vue'
 import { useOrdersStore } from '../stores/orders'
+import { useFactoriesStore } from '../stores/factories'
 import { useAuthStore } from '../stores/auth'
-import { visibleCraft } from '../utils/permissions'
-import type { Craft } from '../constants/roles'
+import { visibleCraft, canEditOrders, allowedRegions } from '../utils/permissions'
+import { CRAFT_LABELS, REGIONS, REGION_LABELS, regionOf, type Craft } from '../constants/roles'
+import { buildDeliveryReport, exportDeliveryExcel, parseDeliveryImport, type ReportRow } from '../utils/deliveryStats'
 
 const orders = useOrdersStore()
+const factories = useFactoriesStore()
 const auth = useAuthStore()
+const fileInput = ref<HTMLInputElement | null>(null)
 
-onMounted(() => orders.fetchAll())
+onMounted(() => Promise.all([orders.fetchAll(), factories.fetchAll()]))
 
 const DEPTS: { craft: Craft; name: string; icon: string }[] = [
   { craft: 'injection', name: '注塑部', icon: '🧩' },
@@ -19,39 +24,92 @@ const DEPTS: { craft: Craft; name: string; icon: string }[] = [
   { craft: 'sewing', name: '车缝部', icon: '🧵' },
 ]
 const mine = computed(() => (auth.role ? visibleCraft(auth.role) : null))
-const cards = computed(() =>
-  DEPTS.filter((d) => !mine.value || d.craft === mine.value).map((d) => {
-    const list = orders.items.filter((o) => o.expand?.factory?.craft === d.craft)
-    return {
-      ...d,
-      count: list.length,
-      ongoing: list.filter((o) => o.status !== 'delivered').length,
-    }
-  }),
+const canEdit = computed(() => (auth.role ? canEditOrders(auth.role) : false))
+const visibleDepts = computed(() => DEPTS.filter((d) => !mine.value || d.craft === mine.value))
+const myRegions = computed(() => (auth.role ? allowedRegions(auth.role) : REGIONS))
+const regionBlocks = computed(() =>
+  myRegions.value.map((region) => ({
+    region,
+    name: REGION_LABELS[region],
+    cards: visibleDepts.value.map((d) => {
+      const list = orders.items.filter((o) => regionOf(o.expand?.factory) === region && o.expand?.factory?.craft === d.craft)
+      return { ...d, count: list.length, ongoing: list.filter((o) => o.status !== 'delivered').length }
+    }),
+  })),
 )
+
+const fname = (o: any) => o.expand?.factory?.name ?? ''
+function craftRows(craft: Craft): ReportRow[] {
+  return buildDeliveryReport(orders.items.filter((o) => o.expand?.factory?.craft === craft), CRAFT_LABELS[craft], fname)
+}
+// craft=null 导出全部(各部门拼接);指定部门只导该部门
+function exportExcel(craft: Craft | null) {
+  if (craft) { exportDeliveryExcel(craftRows(craft), `${CRAFT_LABELS[craft]}外发加工厂交货延期统计表`); return }
+  const all = visibleDepts.value.flatMap((d) => craftRows(d.craft))
+  exportDeliveryExcel(all, '全部-外发加工厂交货延期统计表')
+}
+function onExportDept(ev: Event) {
+  const sel = ev.target as HTMLSelectElement
+  if (sel.value) exportExcel(sel.value as Craft)
+  sel.value = ''
+}
+
+async function importExcel(ev: Event) {
+  const file = (ev.target as HTMLInputElement).files?.[0]
+  if (!file) return
+  const buf = await file.arrayBuffer()
+  const wb = XLSX.read(buf, { cellDates: true })
+  const aoa = XLSX.utils.sheet_to_json<any[]>(wb.Sheets[wb.SheetNames[0]], { header: 1, defval: '' })
+  const fByName: Record<string, string> = {}
+  for (const f of factories.items) fByName[f.name] = f.id
+  const { payloads, failed } = parseDeliveryImport(aoa, fByName)
+  if (!payloads.length && !failed) { alert('未识别到表头(需含「货号/物料名称」)'); return }
+  let ok = 0, fail = failed
+  for (const p of payloads) {
+    try { await orders.create({ ...p, created_by: auth.userId ?? undefined } as any); ok++ } catch { fail++ }
+  }
+  if (fileInput.value) fileInput.value.value = ''
+  await orders.fetchAll()
+  alert(`导入完成：成功 ${ok} 条` + (fail ? `，失败 ${fail} 条(工厂名对不上或缺物料名称)` : '') + '\n(小计/合计行已自动跳过;加工厂名称需与系统一致)')
+}
 </script>
 <template>
   <AppLayout>
     <div class="page">
       <div class="toolbar">
-        <h2 style="margin:0">下单明细</h2>
-        <span class="muted">共 {{ orders.items.length }} 单 · {{ cards.length }} 个部门</span>
+        <h2 style="margin:0">货期管理</h2>
+        <span class="muted">共 {{ orders.items.length }} 单 · {{ myRegions.length }} 厂区</span>
+        <span class="spacer"></span>
+        <button class="ghost" @click="exportExcel(null)">导出全部</button>
+        <select class="dept-export" @change="onExportDept">
+          <option value="">按部门导出…</option>
+          <option v-for="d in visibleDepts" :key="d.craft" :value="d.craft">{{ d.name }}</option>
+        </select>
+        <button v-if="canEdit" class="ghost" @click="fileInput?.click()">导入 Excel</button>
+        <input ref="fileInput" type="file" accept=".xlsx,.xls,.csv" style="display:none" @change="importExcel" />
+        <RouterLink v-if="canEdit" to="/orders/new"><button>+ 新增下单</button></RouterLink>
       </div>
 
-      <div class="dept-grid">
-        <RouterLink v-for="c in cards" :key="c.craft" class="dept-card" :to="`/orders/dept/${c.craft}`">
-          <span class="ico">{{ c.icon }}</span>
-          <div class="info">
-            <span class="name">{{ c.name }}</span>
-            <span class="sub">{{ c.count }} 单<span v-if="c.ongoing" class="ongoing"> · {{ c.ongoing }} 单进行中</span></span>
-          </div>
-          <span class="arrow">→</span>
-        </RouterLink>
-      </div>
+      <section v-for="b in regionBlocks" :key="b.region" class="region-block">
+        <h3 class="region-title">{{ b.name }}厂区</h3>
+        <div class="dept-grid">
+          <RouterLink v-for="c in b.cards" :key="c.craft" class="dept-card" :to="`/orders/dept/${c.craft}?region=${b.region}`">
+            <span class="ico">{{ c.icon }}</span>
+            <div class="info">
+              <span class="name">{{ c.name }}</span>
+              <span class="sub">{{ c.count }} 单<span v-if="c.ongoing" class="ongoing"> · {{ c.ongoing }} 单进行中</span></span>
+            </div>
+            <span class="arrow">→</span>
+          </RouterLink>
+        </div>
+      </section>
     </div>
   </AppLayout>
 </template>
 <style scoped>
+.dept-export { height: 34px; padding: 0 .6rem; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); color: var(--text); cursor: pointer; }
+.region-block { margin-top: 1.5rem; }
+.region-title { margin: 0 0 .8rem; font-size: 1.05rem; color: #1f2533; padding-left: .6rem; border-left: 4px solid var(--primary, #4f46e5); }
 .dept-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 1rem; }
 .dept-card {
   display: flex; align-items: center; gap: 1rem; text-decoration: none; color: var(--text);

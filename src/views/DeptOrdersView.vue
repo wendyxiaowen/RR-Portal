@@ -1,139 +1,368 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, watch } from 'vue'
 import { useRoute, RouterLink } from 'vue-router'
+import * as XLSX from 'xlsx'
 import AppLayout from '../components/AppLayout.vue'
 import { useOrdersStore } from '../stores/orders'
-import { CRAFT_LABELS, type Craft } from '../constants/roles'
-import type { Order, OrderStatus } from '../types/order'
+import { useFactoriesStore } from '../stores/factories'
+import { useAuthStore } from '../stores/auth'
+import { CRAFT_LABELS, REGION_LABELS, regionOf, type Craft, type Region } from '../constants/roles'
+import { canEditOrders, allowedRegions } from '../utils/permissions'
+import { buildDeliveryReport, exportDeliveryExcel, parseDeliveryImport, DELIVERY_HEADERS as HEADERS, type ReportRow, type DetailRow } from '../utils/deliveryStats'
+import { readDeliveryPdfAsAoa } from '../utils/pdfDeliveryImport'
+import type { Order } from '../types/order'
 
 const route = useRoute()
 const orders = useOrdersStore()
+const factories = useFactoriesStore()
+const auth = useAuthStore()
+const fileInput = ref<HTMLInputElement | null>(null)
+const pdfInput = ref<HTMLInputElement | null>(null)
 
 const craft = computed(() => route.params.craft as Craft)
-const deptName = computed(() => CRAFT_LABELS[craft.value] ?? '部门')
+const region = computed(() => (route.query.region as Region) || null)
+const deptName = computed(() =>
+  (region.value ? REGION_LABELS[region.value] + '厂区 · ' : '') + (CRAFT_LABELS[craft.value] ?? '部门'))
+const newLink = computed(() => `/orders/dept/${craft.value}/new` + (region.value ? `?region=${region.value}` : ''))
+const search = ref<string>('')
+const canEdit = computed(() => (auth.role ? canEditOrders(auth.role) : false))
 
-const statusFilter = ref<string>('')
-const STATUS: { value: OrderStatus; label: string; cls: string }[] = [
-  { value: 'placed', label: '已下单', cls: 'status-limited' },
-  { value: 'producing', label: '生产中', cls: 'badge-B' },
-  { value: 'delivered', label: '已交货', cls: 'status-active' },
-  { value: 'cancelled', label: '已取消', cls: 'status-eliminated' },
-  { value: 'returned', label: '退货', cls: 'flag-red' },
-]
-const statusMeta = (s?: string) => STATUS.find((x) => x.value === s)
+onMounted(() => Promise.all([orders.fetchAll(), factories.fetchAll()]))
 
-// 本部门订单
-const deptOrders = computed(() =>
-  orders.items.filter((o) => o.expand?.factory?.craft === craft.value)
-    .filter((o) => !statusFilter.value || o.status === statusFilter.value),
-)
+const myRegions = computed(() => (auth.role ? allowedRegions(auth.role) : null))
+const deptOrders = computed(() => {
+  const q = search.value.trim().toLowerCase()
+  return orders.items
+    .filter((o) => o.expand?.factory?.craft === craft.value && (!region.value || regionOf(o.expand?.factory) === region.value))
+    .filter((o) => !myRegions.value || myRegions.value.includes(regionOf(o.expand?.factory)))
+    .filter((o) => {
+      if (!q) return true
+      return [o.expand?.factory?.name, o.pmc, o.item_no, o.order_no, o.product]
+        .some((s) => (s ?? '').toLowerCase().includes(q))
+    })
+})
+const orderCount = computed(() => deptOrders.value.length)
+const rows = computed<ReportRow[]>(() =>
+  buildDeliveryReport(deptOrders.value, deptName.value, (o) => o.expand?.factory?.name ?? ''))
+const visibleColumnCount = computed(() => HEADERS.length + (canEdit.value ? 1 : 0))
 
-async function load() {
+type RowDraft = {
+  product: string
+  quantity: string
+  actual_delivery_date: string
+  quote_labor_price: string
+  unit_price: string
+}
+const drafts = ref<Record<string, RowDraft>>({})
+
+async function importRows(aoa: any[][]) {
+  const fByName: Record<string, string> = {}
+  for (const f of factories.items) fByName[f.name] = f.id
+  const { payloads, failed } = parseDeliveryImport(aoa, fByName)
+  if (!payloads.length && !failed) { alert('未识别到表头(需含「货号/物料名称」)'); return }
+  let ok = 0, fail = failed
+  for (const p of payloads) {
+    try { await orders.create({ ...p, created_by: auth.userId ?? undefined } as any); ok++ } catch { fail++ }
+  }
+  await orders.fetchAll()
+  alert(`导入完成：成功 ${ok} 条` + (fail ? `，失败 ${fail} 条(工厂名对不上或缺物料名称)` : '') + '\n(小计/合计行已自动跳过;加工厂名称需与系统一致)')
+}
+
+async function importExcel(ev: Event) {
+  const file = (ev.target as HTMLInputElement).files?.[0]
+  if (!file) return
+  const buf = await file.arrayBuffer()
+  const wb = XLSX.read(buf, { cellDates: true })
+  const aoa = XLSX.utils.sheet_to_json<any[]>(wb.Sheets[wb.SheetNames[0]], { header: 1, defval: '' })
+  await importRows(aoa)
+  if (fileInput.value) fileInput.value.value = ''
+}
+
+async function importPdf(ev: Event) {
+  const files = Array.from((ev.target as HTMLInputElement).files ?? []).filter((file) => file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf'))
+  if (!files.length) return
+  try {
+    const merged: any[][] = []
+    for (const file of files) {
+      const aoa = await readDeliveryPdfAsAoa(file)
+      if (!aoa.length) continue
+      if (!merged.length) merged.push(...aoa)
+      else merged.push(...aoa.slice(1))
+    }
+    await importRows(merged)
+  } catch (err) {
+    console.error(err)
+    alert('PDF 解析失败，请确认文件是文字版表格 PDF，不是扫描图片。')
+  } finally {
+    if (pdfInput.value) pdfInput.value.value = ''
+  }
+}
+
+function priceInputValue(val: number | null | undefined) {
+  return val == null ? '' : String(val)
+}
+
+function draftFromRow(row: DetailRow): RowDraft {
+  return {
+    product: row.product || '',
+    quantity: priceInputValue(row.quantity),
+    actual_delivery_date: row.actual_delivery_date || '',
+    quote_labor_price: priceInputValue(row.quote),
+    unit_price: priceInputValue(row.outPrice),
+  }
+}
+
+function syncDrafts() {
+  const next: Record<string, RowDraft> = {}
+  for (const row of rows.value) {
+    if (row.kind !== 'detail') continue
+    next[row.id] = drafts.value[row.id] ?? draftFromRow(row)
+  }
+  drafts.value = next
+}
+
+watch(rows, syncDrafts, { immediate: true })
+
+function draftValue(row: DetailRow, field: keyof RowDraft) {
+  if (!drafts.value[row.id]) drafts.value[row.id] = draftFromRow(row)
+  return drafts.value[row.id][field]
+}
+
+function setDraftValue(row: DetailRow, field: keyof RowDraft, value: string) {
+  if (!drafts.value[row.id]) drafts.value[row.id] = draftFromRow(row)
+  drafts.value[row.id][field] = value
+}
+
+function parsePrice(val: string) {
+  const raw = val.trim()
+  if (!raw) return null
+  const next = Number(raw)
+  return Number.isFinite(next) ? next : undefined
+}
+
+function sourceOrder(row: DetailRow) {
+  return orders.items.find((order) => order.id === row.id)
+}
+
+function exportExcel() {
+  exportDeliveryExcel(rows.value, `${deptName.value}外发加工厂交货延期统计表`)
+}
+
+async function saveRow(row: DetailRow) {
+  const draft = drafts.value[row.id] ?? draftFromRow(row)
+  const product = draft.product.trim()
+  const quantity = parsePrice(draft.quantity)
+  const quote = parsePrice(draft.quote_labor_price)
+  const unitPrice = parsePrice(draft.unit_price)
+  if (!product) {
+    alert('请输入物料名称')
+    return
+  }
+  if (quantity === undefined) {
+    alert('数量请输入有效数字')
+    return
+  }
+  if (quote === undefined || unitPrice === undefined) {
+    alert('工价请输入有效数字')
+    return
+  }
+
+  const data: Partial<any> = {
+    product,
+    quantity,
+    actual_delivery_date: draft.actual_delivery_date ? new Date(draft.actual_delivery_date).toISOString() : '',
+    quote_labor_price: quote,
+    unit_price: unitPrice,
+    amount: quantity === null || unitPrice === null ? null : quantity * unitPrice,
+  }
+  if (draft.actual_delivery_date && row.delivery_date) {
+    const days = Math.round((new Date(draft.actual_delivery_date).getTime() - new Date(row.delivery_date).getTime()) / 86400000)
+    data.delay_days = days > 0 ? days : 0
+    data.is_delayed = days > 0
+  } else {
+    data.delay_days = 0
+    data.is_delayed = false
+  }
+  await orders.update(row.id, data)
+  await orders.fetchAll()
+  drafts.value[row.id] = draft
+}
+
+async function copyRow(row: DetailRow) {
+  const source = sourceOrder(row)
+  if (!source) {
+    alert('未找到原订单，无法复制')
+    return
+  }
+  const draft = drafts.value[row.id] ?? draftFromRow(row)
+  const product = draft.product.trim() || source.product
+  const quantity = parsePrice(draft.quantity)
+  const quote = parsePrice(draft.quote_labor_price)
+  const unitPrice = parsePrice(draft.unit_price)
+  if (quantity === undefined) {
+    alert('数量请输入有效数字')
+    return
+  }
+  if (quote === undefined || unitPrice === undefined) {
+    alert('工价请输入有效数字')
+    return
+  }
+  const payload: Partial<Order> = {
+    factory: source.factory,
+    process: source.process,
+    workshop: source.workshop,
+    item_no: source.item_no,
+    product,
+    quantity: quantity ?? undefined,
+    supplier_price: source.supplier_price,
+    process_category: source.process_category,
+    quote_labor_price: quote ?? undefined,
+    unit_price: unitPrice ?? undefined,
+    amount: quantity != null && unitPrice != null ? quantity * unitPrice : source.amount,
+    defect_rate: source.defect_rate,
+    pmc: source.pmc,
+    order_no: source.order_no,
+    order_date: source.order_date,
+    delivery_date: source.delivery_date,
+    actual_delivery_date: draft.actual_delivery_date || source.actual_delivery_date,
+    return_count: source.return_count,
+    status: source.status ?? 'placed',
+    current_product: source.current_product,
+    progress: source.progress,
+    is_delayed: source.is_delayed,
+    delay_days: source.delay_days,
+    delay_reason: source.delay_reason,
+    inspect_count: source.inspect_count,
+    defect_count: source.defect_count,
+    is_resolved: source.is_resolved,
+    quality_issues: source.quality_issues,
+    manager_rating: source.manager_rating,
+    notes: source.notes,
+    created_by: auth.userId ?? source.created_by,
+  }
+  await orders.create(payload)
   await orders.fetchAll()
 }
-onMounted(load)
 
-async function changeStatus(o: Order, ev: Event) {
-  const v = (ev.target as HTMLSelectElement).value as OrderStatus
-  await orders.update(o.id, { status: v })
-  await load()
+async function removeRow(row: DetailRow) {
+  if (!confirm(`确定删除「${row.product || row.order_no || row.item_no}」这条订单记录？此操作不可恢复。`)) return
+  await orders.remove(row.id)
+  delete drafts.value[row.id]
+  await orders.fetchAll()
 }
-async function changeNotes(o: Order, ev: Event) {
-  const v = (ev.target as HTMLInputElement).value
-  await orders.update(o.id, { notes: v })
-}
-async function changeCurrentProduct(o: Order, ev: Event) {
-  await orders.update(o.id, { current_product: (ev.target as HTMLInputElement).value })
-}
-async function changeProgress(o: Order, ev: Event) {
-  const raw = (ev.target as HTMLInputElement).value
-  await orders.update(o.id, { progress: raw === '' ? undefined : Number(raw) })
-}
-async function changeDelayed(o: Order, ev: Event) {
-  await orders.update(o.id, { is_delayed: (ev.target as HTMLSelectElement).value === 'true' })
-  await load()
-}
-async function changeDelayDays(o: Order, ev: Event) {
-  const raw = (ev.target as HTMLInputElement).value
-  await orders.update(o.id, { delay_days: raw === '' ? undefined : Number(raw) })
-}
-async function changeDelayReason(o: Order, ev: Event) {
-  await orders.update(o.id, { delay_reason: (ev.target as HTMLInputElement).value })
-}
-function factoryName(o: Order) { return o.expand?.factory?.name ?? '-' }
 </script>
 <template>
   <AppLayout>
     <div class="page wide">
       <div class="toolbar">
         <RouterLink to="/orders" class="back">← 部门</RouterLink>
-        <h2 style="margin:0">{{ deptName }} · 下单明细</h2>
-        <span class="muted">共 {{ deptOrders.length }} 单</span>
-        <RouterLink :to="`/orders/dept/${craft}/new`"><button>+ 新增下单</button></RouterLink>
+        <h2 style="margin:0">{{ deptName }} · 货期管理</h2>
+        <span class="muted">共 {{ orderCount }} 单</span>
+        <RouterLink v-if="canEdit" :to="newLink"><button>+ 新增下单</button></RouterLink>
         <span class="spacer"></span>
-        <label>状态
-          <select v-model="statusFilter">
-            <option value="">全部</option>
-            <option v-for="s in STATUS" :key="s.value" :value="s.value">{{ s.label }}</option>
-          </select>
-        </label>
+        <button v-if="canEdit" class="ghost" @click="pdfInput?.click()">导入 PDF</button>
+        <input ref="pdfInput" type="file" accept=".pdf,application/pdf" multiple style="display:none" @change="importPdf" />
+        <button v-if="canEdit" class="ghost" @click="fileInput?.click()">导入 Excel</button>
+        <input ref="fileInput" type="file" accept=".xlsx,.xls,.csv" style="display:none" @change="importExcel" />
+        <input class="search-box" v-model="search" placeholder="搜索 工厂/PMC/货号/订单号/产品" />
+        <button @click="exportExcel">导出 Excel</button>
       </div>
-
-      <table>
-        <thead><tr><th>工厂</th><th>工序</th><th>货号</th><th>产品</th><th>数量</th><th>单价</th><th>金额</th><th>下单日期</th><th>交货日期</th><th>当前在生产产品</th><th>生产完成进度</th><th>是否延期</th><th>延期天数</th><th>主要延期原因</th><th>状态</th><th>备注</th></tr></thead>
-        <tbody>
-          <tr v-for="o in deptOrders" :key="o.id">
-            <td>{{ factoryName(o) }}</td>
-            <td>{{ o.process || '-' }}</td>
-            <td>{{ o.item_no || '-' }}</td>
-            <td>{{ o.product }}</td>
-            <td>{{ o.quantity ?? '-' }}</td>
-            <td>{{ o.unit_price != null ? o.unit_price : '-' }}</td>
-            <td>{{ o.amount != null ? o.amount.toLocaleString() : '-' }}</td>
-            <td>{{ o.order_date ? o.order_date.slice(0,10) : '-' }}</td>
-            <td>{{ o.delivery_date ? o.delivery_date.slice(0,10) : '-' }}</td>
-            <td><input class="cur-input" :value="o.current_product ?? ''" placeholder="产品" @change="changeCurrentProduct(o, $event)" /></td>
-            <td>
-              <span class="prog-cell">
-                <input class="num-input" :value="o.progress ?? ''" type="number" min="0" max="100" placeholder="-" @change="changeProgress(o, $event)" /><span class="pct">%</span>
-              </span>
-            </td>
-            <td>
-              <select class="delay-sel" :value="String(o.is_delayed ?? false)" @change="changeDelayed(o, $event)">
-                <option value="false">否</option>
-                <option value="true">是</option>
-              </select>
-            </td>
-            <td><input class="num-input" :value="o.delay_days ?? ''" type="number" min="0" placeholder="-" @change="changeDelayDays(o, $event)" /></td>
-            <td><input class="reason-input" :value="o.delay_reason ?? ''" placeholder="原因" @change="changeDelayReason(o, $event)" /></td>
-            <td>
-              <select class="status-sel" :class="statusMeta(o.status)?.cls"
-                :value="o.status ?? 'placed'" @change="changeStatus(o, $event)">
-                <option v-for="s in STATUS" :key="s.value" :value="s.value">{{ s.label }}</option>
-              </select>
-            </td>
-            <td>
-              <input class="notes-input" :value="o.notes ?? ''" placeholder="备注" @change="changeNotes(o, $event)" />
-            </td>
-          </tr>
-          <tr v-if="!deptOrders.length"><td colspan="16" class="hint" style="text-align:center">该部门暂无订单</td></tr>
-        </tbody>
-      </table>
+      <div class="scroll">
+        <table class="report">
+          <thead>
+            <tr>
+              <th v-for="h in HEADERS" :key="h">{{ h }}</th>
+              <th v-if="canEdit" class="op-col">操作</th>
+            </tr>
+          </thead>
+          <tbody>
+            <template v-for="(r, i) in rows" :key="i">
+              <tr v-if="r.kind === 'detail'">
+                <td v-if="r.rangeSpan" :rowspan="r.rangeSpan" class="grp">{{ r.range }}</td>
+                <td v-if="r.pmcSpan" :rowspan="r.pmcSpan" class="grp">{{ r.pmc || '-' }}</td>
+                <td v-if="r.factorySpan" :rowspan="r.factorySpan" class="grp">{{ r.factory || '-' }}</td>
+                <td>{{ r.item_no || '-' }}</td>
+                <td>{{ r.order_no || '-' }}</td>
+                <td>{{ r.category || '-' }}</td>
+                <td>
+                  <input v-if="canEdit" class="text-inp" :value="draftValue(r, 'product')"
+                    @input="setDraftValue(r, 'product', ($event.target as HTMLInputElement).value)" />
+                  <span v-else>{{ r.product || '-' }}</span>
+                </td>
+                <td>
+                  <input v-if="canEdit" type="number" class="qty-inp" min="0" :value="draftValue(r, 'quantity')"
+                    @input="setDraftValue(r, 'quantity', ($event.target as HTMLInputElement).value)" />
+                  <span v-else>{{ r.quantity ?? '-' }}</span>
+                </td>
+                <td>{{ r.order_date || '-' }}</td>
+                <td>{{ r.delivery_date || '-' }}</td>
+                <td>
+                  <input v-if="canEdit" type="date" class="date-inp" :value="draftValue(r, 'actual_delivery_date')"
+                    @input="setDraftValue(r, 'actual_delivery_date', ($event.target as HTMLInputElement).value)" />
+                  <span v-else>{{ r.actual_delivery_date || '-' }}</span>
+                </td>
+                <td>{{ r.delay_days ?? '-' }}</td>
+                <td>{{ r.orderCount }}</td>
+                <td>{{ r.delayedCount }}</td>
+                <td>{{ r.delayRatio }}</td>
+                <td>{{ r.delayAvg }}</td>
+                <td>
+                  <input v-if="canEdit" type="number" class="price-inp" min="0" step="0.01"
+                    :value="draftValue(r, 'quote_labor_price')"
+                    @input="setDraftValue(r, 'quote_labor_price', ($event.target as HTMLInputElement).value)" />
+                  <span v-else>{{ r.quote }}</span>
+                </td>
+                <td>
+                  <input v-if="canEdit" type="number" class="price-inp" min="0" step="0.01"
+                    :value="draftValue(r, 'unit_price')"
+                    @input="setDraftValue(r, 'unit_price', ($event.target as HTMLInputElement).value)" />
+                  <span v-else>{{ r.outPrice }}</span>
+                </td>
+                <td>{{ r.priceRatio }}</td>
+                <td>{{ r.notes || '-' }}</td>
+                <td v-if="canEdit" class="op-cell">
+                  <div class="op-actions">
+                    <button class="ghost mini" @click="saveRow(r)">保存</button>
+                    <button class="ghost mini" @click="copyRow(r)">复制单</button>
+                    <button class="ghost mini danger" @click="removeRow(r)">删除</button>
+                  </div>
+                </td>
+              </tr>
+              <tr v-else class="subtotal">
+                <td :colspan="9">{{ r.factory }}-小计</td>
+                <td>{{ r.orderCount }}</td>
+                <td>{{ r.delayedCount }}</td>
+                <td>{{ r.delayRatio }}</td>
+                <td>{{ r.delayAvg }}</td>
+                <td>{{ r.quote }}</td>
+                <td>{{ r.outPrice }}</td>
+                <td>{{ r.priceRatio }}</td>
+                <td></td>
+                <td v-if="canEdit"></td>
+              </tr>
+            </template>
+            <tr v-if="!rows.length"><td :colspan="visibleColumnCount" class="hint" style="text-align:center">该部门暂无订单</td></tr>
+          </tbody>
+        </table>
+      </div>
     </div>
   </AppLayout>
 </template>
 <style scoped>
-.wide { max-width: none; } /* 宽表铺满，避免左侧大片留白 */
+.wide { max-width: none; }
 .back { font-size: .9rem; }
-.form-card { margin-bottom: 1.25rem; }
-.order-form { display: flex; gap: .75rem; flex-wrap: wrap; align-items: flex-end; }
-.order-form label { display: flex; flex-direction: column; gap: .25rem; }
-.status-sel { border: none; font-weight: 600; font-size: .82rem; padding: .2rem .5rem; border-radius: 999px; cursor: pointer; }
-.notes-input { width: 100%; min-width: 120px; padding: .3rem .5rem; font-size: .85rem; }
-.delay-sel { padding: .25rem .4rem; font-size: .82rem; }
-.num-input { width: 56px; padding: .3rem .4rem; font-size: .85rem; }
-.reason-input { width: 120px; padding: .3rem .5rem; font-size: .85rem; }
-.cur-input { width: 110px; padding: .3rem .5rem; font-size: .85rem; }
-.prog-cell { display: inline-flex; align-items: center; gap: 2px; }
-.pct { color: var(--text-soft); font-size: .82rem; }
+.search-box { width: 240px; padding: .4rem .7rem; font-size: .9rem; border: 1px solid var(--border); border-radius: var(--radius-sm); }
+.scroll { overflow-x: auto; }
+.report { min-width: 2720px; }
+.report th, .report td { white-space: nowrap; text-align: center; font-size: .85rem; }
+.report td.grp { font-weight: 600; background: #fafbff; }
+.report tr.subtotal td { background: #fff7e6; font-weight: 600; }
+.date-inp { padding: .25rem .4rem; font-size: .82rem; border: 1px solid var(--border); border-radius: var(--radius-sm); }
+.price-inp { width: 96px; padding: .25rem .4rem; font-size: .82rem; text-align: center; border: 1px solid var(--border); border-radius: var(--radius-sm); }
+.text-inp { width: 132px; padding: .25rem .4rem; font-size: .82rem; border: 1px solid var(--border); border-radius: var(--radius-sm); }
+.qty-inp { width: 88px; padding: .25rem .4rem; font-size: .82rem; text-align: center; border: 1px solid var(--border); border-radius: var(--radius-sm); }
+.op-col { min-width: 172px; }
+.op-actions { display: flex; gap: .35rem; justify-content: center; align-items: center; }
+.mini { padding: .25rem .5rem; font-size: .8rem; }
+.danger { color: #dc2626; border-color: #fecaca; }
 </style>

@@ -2,6 +2,7 @@
 import { ref, onMounted, computed } from 'vue'
 import { RouterLink } from 'vue-router'
 import AppLayout from '../components/AppLayout.vue'
+import FactoryCompare from '../components/FactoryCompare.vue'
 import { useAuthStore } from '../stores/auth'
 import { useScoresStore } from '../stores/scores'
 import { useFactoriesStore } from '../stores/factories'
@@ -84,14 +85,14 @@ const roleLabel = computed(() => (auth.role ? ROLE_LABELS[auth.role] : ''))
         <!-- 等级分布 -->
         <section class="panel">
           <h3 class="panel-title">本月等级分布</h3>
-          <div v-for="(meta, g) in gradeMeta" :key="g" class="grade-row">
+          <RouterLink v-for="(meta, g) in gradeMeta" :key="g" class="grade-row" :to="`/grade/${month}/${g}`" title="查看该等级工厂">
             <span class="grade-tag" :style="{ background: meta.color }">{{ g }}</span>
             <span class="grade-name">{{ meta.label }}</span>
             <div class="grade-bar">
               <div class="grade-fill" :style="{ width: (gradeDist[g] / gradeTotal * 100) + '%', background: meta.color }"></div>
             </div>
             <span class="grade-cnt">{{ gradeDist[g] }}</span>
-          </div>
+          </RouterLink>
         </section>
 
         <!-- 快捷入口 -->
@@ -100,13 +101,15 @@ const roleLabel = computed(() => (auth.role ? ROLE_LABELS[auth.role] : ''))
           <div class="quick">
             <RouterLink class="q-card" to="/factories"><span class="q-ico">🏭</span>工厂管理</RouterLink>
             <RouterLink class="q-card" :to="`/review/${month}`"><span class="q-ico">📊</span>评审大盘</RouterLink>
-            <RouterLink class="q-card" to="/kpi"><span class="q-ico">🎯</span>KPI 看板</RouterLink>
-            <RouterLink v-if="auth.role && canEditOutput(auth.role)" class="q-card" to="/monthly-output"><span class="q-ico">💰</span>产值录入</RouterLink>
+            <RouterLink v-if="auth.role && canEditOutput(auth.role)" class="q-card" to="/monthly-output"><span class="q-ico">💰</span>产值管理</RouterLink>
             <RouterLink v-if="auth.role && canEditTemplates(auth.role)" class="q-card" to="/admin/score-templates"><span class="q-ico">⚙️</span>评分模板</RouterLink>
             <RouterLink v-if="auth.role && canEditTemplates(auth.role)" class="q-card" to="/admin/users"><span class="q-ico">👥</span>用户管理</RouterLink>
           </div>
         </section>
       </div>
+
+      <!-- 工厂对比 -->
+      <FactoryCompare />
     </div>
   </AppLayout>
 </template>
@@ -143,7 +146,8 @@ const roleLabel = computed(() => (auth.role ? ROLE_LABELS[auth.role] : ''))
 .panel { background: #fff; border: 1px solid #eef0f4; border-radius: 14px; padding: 1.25rem 1.4rem; box-shadow: 0 1px 3px rgba(0,0,0,.04); }
 .panel-title { margin: 0 0 1rem; font-size: 1rem; color: #1f2533; }
 
-.grade-row { display: grid; grid-template-columns: 28px 64px 1fr 28px; align-items: center; gap: .6rem; margin-bottom: .7rem; }
+.grade-row { display: grid; grid-template-columns: 28px 64px 1fr 28px; align-items: center; gap: .6rem; margin-bottom: .7rem; text-decoration: none; color: inherit; padding: .3rem .4rem; margin-left: -.4rem; margin-right: -.4rem; border-radius: 8px; cursor: pointer; transition: background .15s ease; }
+.grade-row:hover { background: #f5f7ff; }
 .grade-tag { color: #fff; font-weight: 700; text-align: center; border-radius: 6px; font-size: .8rem; padding: .15rem 0; }
 .grade-name { font-size: .82rem; color: #6b7280; }
 .grade-bar { background: #f1f3f7; border-radius: 6px; height: 10px; overflow: hidden; }

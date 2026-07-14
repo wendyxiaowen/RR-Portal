@@ -20,5 +20,8 @@ export const useOrdersStore = defineStore('orders', () => {
   async function update(id: string, data: Partial<Order>) {
     return pb.collection('orders').update<Order>(id, data)
   }
-  return { items, fetchAll, create, update }
+  async function remove(id: string) {
+    return pb.collection('orders').delete(id)
+  }
+  return { items, fetchAll, create, update, remove }
 })

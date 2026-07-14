@@ -3,14 +3,22 @@ export interface Order {
   id: string
   factory: string
   process?: string
+  workshop?: string
   item_no?: string
   product: string
   quantity?: number
+  supplier_price?: number
+  process_category?: string
+  quote_labor_price?: number
   unit_price?: number
   amount?: number
   defect_rate?: number
+  pmc?: string
+  order_no?: string
   order_date?: string
   delivery_date?: string
+  actual_delivery_date?: string
+  return_count?: number
   status?: OrderStatus
   current_product?: string
   progress?: number
