@@ -47,6 +47,7 @@ const rows = computed<ReportRow[]>(() =>
 const visibleColumnCount = computed(() => HEADERS.length + (canEdit.value ? 1 : 0))
 
 type RowDraft = {
+  pmc: string
   product: string
   quantity: string
   actual_delivery_date: string
@@ -104,6 +105,7 @@ function priceInputValue(val: number | null | undefined) {
 
 function draftFromRow(row: DetailRow): RowDraft {
   return {
+    pmc: row.pmc || '',
     product: row.product || '',
     quantity: priceInputValue(row.quantity),
     actual_delivery_date: row.actual_delivery_date || '',
@@ -168,6 +170,7 @@ async function saveRow(row: DetailRow) {
   }
 
   const data: Partial<any> = {
+    pmc: draft.pmc.trim(),
     product,
     quantity,
     actual_delivery_date: draft.actual_delivery_date ? new Date(draft.actual_delivery_date).toISOString() : '',
@@ -220,7 +223,7 @@ async function copyRow(row: DetailRow) {
     unit_price: unitPrice ?? undefined,
     amount: quantity != null && unitPrice != null ? quantity * unitPrice : source.amount,
     defect_rate: source.defect_rate,
-    pmc: source.pmc,
+    pmc: draft.pmc.trim(),
     order_no: source.order_no,
     order_date: source.order_date,
     delivery_date: source.delivery_date,
@@ -279,7 +282,11 @@ async function removeRow(row: DetailRow) {
             <template v-for="(r, i) in rows" :key="i">
               <tr v-if="r.kind === 'detail'">
                 <td v-if="r.rangeSpan" :rowspan="r.rangeSpan" class="grp">{{ r.range }}</td>
-                <td v-if="r.pmcSpan" :rowspan="r.pmcSpan" class="grp">{{ r.pmc || '-' }}</td>
+                <td>
+                  <input v-if="canEdit" class="pmc-inp" :value="draftValue(r, 'pmc')"
+                    @input="setDraftValue(r, 'pmc', ($event.target as HTMLInputElement).value)" />
+                  <span v-else>{{ r.pmc || '-' }}</span>
+                </td>
                 <td v-if="r.factorySpan" :rowspan="r.factorySpan" class="grp">{{ r.factory || '-' }}</td>
                 <td>{{ r.item_no || '-' }}</td>
                 <td>{{ r.order_no || '-' }}</td>
@@ -329,6 +336,7 @@ async function removeRow(row: DetailRow) {
                 </td>
               </tr>
               <tr v-else class="subtotal">
+                <td></td>
                 <td :colspan="9">{{ r.factory }}-小计</td>
                 <td>{{ r.orderCount }}</td>
                 <td>{{ r.delayedCount }}</td>
@@ -358,6 +366,7 @@ async function removeRow(row: DetailRow) {
 .report td.grp { font-weight: 600; background: #fafbff; }
 .report tr.subtotal td { background: #fff7e6; font-weight: 600; }
 .date-inp { padding: .25rem .4rem; font-size: .82rem; border: 1px solid var(--border); border-radius: var(--radius-sm); }
+.pmc-inp { width: 96px; padding: .25rem .4rem; font-size: .82rem; text-align: center; border: 1px solid var(--border); border-radius: var(--radius-sm); }
 .price-inp { width: 96px; padding: .25rem .4rem; font-size: .82rem; text-align: center; border: 1px solid var(--border); border-radius: var(--radius-sm); }
 .text-inp { width: 132px; padding: .25rem .4rem; font-size: .82rem; border: 1px solid var(--border); border-radius: var(--radius-sm); }
 .qty-inp { width: 88px; padding: .25rem .4rem; font-size: .82rem; text-align: center; border: 1px solid var(--border); border-radius: var(--radius-sm); }

@@ -3,6 +3,7 @@ import { ref, computed, onMounted } from 'vue'
 import AppLayout from '../components/AppLayout.vue'
 import { useOrdersStore } from '../stores/orders'
 import { CRAFT_LABELS } from '../constants/roles'
+import { allowedCrafts } from '../utils/permissions'
 import type { Order } from '../types/order'
 
 const orders = useOrdersStore()
@@ -70,7 +71,7 @@ function dept(o: Order) { const c = o.expand?.factory?.craft; return c ? CRAFT_L
         <span class="spacer"></span>
         <select v-model="deptFilter">
           <option value="">全部部门</option>
-          <option v-for="(label, key) in CRAFT_LABELS" :key="key" :value="key">{{ label }}</option>
+          <option v-for="craft in allowedCrafts()" :key="craft" :value="craft">{{ CRAFT_LABELS[craft] }}</option>
         </select>
         <select v-model="qualityFilter">
           <option value="">全部品质</option>

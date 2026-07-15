@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { canEditOutput, canApproveStatus, visibleCraft } from '../src/utils/permissions'
+import { allowedCrafts, canApproveStatus, canEditOutput, canViewCraft, setAuthorizedCrafts, visibleCraft } from '../src/utils/permissions'
 
 describe('permissions', () => {
   it('only finance_cost can edit output', () => {
@@ -11,8 +11,15 @@ describe('permissions', () => {
     expect(canApproveStatus('sc_manager')).toBe(true)
     expect(canApproveStatus('buyer_injection')).toBe(false)
   })
-  it('buyer sees only own craft, others see all', () => {
+  it('supports multiple authorized departments', () => {
+    setAuthorizedCrafts(['painting', 'sewing'])
+    expect(allowedCrafts()).toEqual(['painting', 'sewing'])
+    expect(canViewCraft('painting')).toBe(true)
+    expect(canViewCraft('injection')).toBe(false)
+    expect(visibleCraft('buyer_painting')).toBeNull()
+    setAuthorizedCrafts(['painting'])
     expect(visibleCraft('buyer_painting')).toBe('painting')
-    expect(visibleCraft('sc_manager')).toBeNull()
+    setAuthorizedCrafts([])
+    expect(allowedCrafts()).toHaveLength(4)
   })
 })

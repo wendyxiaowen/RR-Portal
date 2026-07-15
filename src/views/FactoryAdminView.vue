@@ -4,7 +4,7 @@ import { RouterLink } from 'vue-router'
 import AppLayout from '../components/AppLayout.vue'
 import { useFactoriesStore } from '../stores/factories'
 import { useAuthStore } from '../stores/auth'
-import { allowedRegions } from '../utils/permissions'
+import { allowedCrafts, allowedRegions } from '../utils/permissions'
 import { REGIONS, REGION_LABELS, regionOf, type Craft } from '../constants/roles'
 import type { Factory } from '../types/factory'
 
@@ -23,7 +23,7 @@ const regionBlocks = computed(() =>
   myRegions.value.map((region) => ({
     region,
     name: REGION_LABELS[region],
-    cards: DEPTS.map((d) => ({
+    cards: DEPTS.filter((d) => allowedCrafts().includes(d.craft)).map((d) => ({
       ...d,
       count: store.items.filter((f: Factory) => regionOf(f) === region && f.craft === d.craft).length,
     })),

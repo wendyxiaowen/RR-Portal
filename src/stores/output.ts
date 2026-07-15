@@ -2,15 +2,21 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { pb } from '../pb'
 import type { MonthlyOutput } from '../types/output'
+import { canViewCraft } from '../utils/permissions'
+import type { Craft } from '../constants/roles'
 
 export const useOutputStore = defineStore('output', () => {
   const items = ref<MonthlyOutput[]>([])
 
   async function fetchByMonth(yearMonth: string) {
-    items.value = await pb.collection('monthly_output').getFullList<MonthlyOutput>({
+    const records = await pb.collection('monthly_output').getFullList<MonthlyOutput>({
       filter: `year_month = "${yearMonth}"`,
       expand: 'factory',
       sort: 'factory',
+    })
+    items.value = records.filter((item) => {
+      const craft = (item as any).expand?.factory?.craft as Craft | undefined
+      return !craft || canViewCraft(craft)
     })
   }
   async function upsert(data: Partial<MonthlyOutput>) {

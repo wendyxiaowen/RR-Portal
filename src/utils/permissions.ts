@@ -1,5 +1,5 @@
 import type { Role, Craft, Region } from '../constants/roles'
-import { isBuyer, REGIONS } from '../constants/roles'
+import { CRAFTS, isBuyer, REGIONS } from '../constants/roles'
 
 // —— 可逐项勾选的模块（用户管理里设置）——
 export interface PermModule { key: string; label: string; edit: boolean }
@@ -43,9 +43,16 @@ export function roleDefault(role: Role): Record<string, boolean> {
 
 // 当前登录用户的覆盖项（auth store 在登录/初始化时注入）
 let _ov: Record<string, boolean> = {}
+let _crafts: Craft[] | null = null
 export function setPermissionOverrides(o: Record<string, boolean> | null | undefined) {
   _ov = o && typeof o === 'object' ? o : {}
 }
+export function setAuthorizedCrafts(crafts: Craft[] | null | undefined) {
+  const valid = (Array.isArray(crafts) ? crafts : []).filter((craft): craft is Craft => CRAFTS.includes(craft))
+  _crafts = valid.length ? [...new Set(valid)] : null
+}
+export const allowedCrafts = (): Craft[] => (_crafts ? [..._crafts] : [...CRAFTS])
+export const canViewCraft = (craft: Craft): boolean => !_crafts || _crafts.includes(craft)
 function cap(role: Role, key: string): boolean {
   if (key in _ov) return !!_ov[key]
   return !!roleDefault(role)[key]
@@ -99,7 +106,7 @@ export function canAccessPath(role: Role, path: string): boolean {
   return true
 }
 
-// 返回该角色只能看的工艺；null = 看全部。采购不分部门，故一律 null。
+// 兼容旧页面：仅授权一个部门时返回该部门；多部门或全部部门时返回 null。
 export function visibleCraft(_role: Role): Craft | null {
-  return null
+  return _crafts?.length === 1 ? _crafts[0] : null
 }

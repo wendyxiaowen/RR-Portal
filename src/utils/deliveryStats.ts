@@ -1,5 +1,6 @@
 import * as XLSX from 'xlsx'
 import type { Order } from '../types/order'
+import { resolveFactoryName } from './factoryName'
 
 // 报表表头(单行,25 列)
 export const DELIVERY_HEADERS = [
@@ -269,27 +270,224 @@ export function exportDeliveryExcel(rows: ReportRow[], title: string) {
   XLSX.writeFile(wb, `${title}.xlsx`)
 }
 
+const compactText = (s: any) => String(s ?? '').replace(/\s+/g, '')
+const cleanText = (s: any) => String(s ?? '').trim()
+
+function parseNumberCell(value: any): number | undefined {
+  if (value === '' || value == null) return undefined
+  if (typeof value === 'number') return Number.isFinite(value) ? value : undefined
+  const cleaned = String(value).replace(/[,，\s]/g, '').trim()
+  if (!cleaned || /^[-－—]+$/.test(cleaned)) return undefined
+  const next = Number(cleaned)
+  return Number.isFinite(next) ? next : undefined
+}
+
+function formatImportDate(value: any): string {
+  if (value instanceof Date) {
+    const y = value.getFullYear()
+    const m = String(value.getMonth() + 1).padStart(2, '0')
+    const d = String(value.getDate()).padStart(2, '0')
+    return `${y}-${m}-${d}`
+  }
+  const text = cleanText(value)
+  const m = text.match(/(\d{4})[\/\-年.](\d{1,2})[\/\-月.](\d{1,2})/)
+  if (!m) return text
+  return `${m[1]}-${m[2].padStart(2, '0')}-${m[3].padStart(2, '0')}`
+}
+
+function factoryIdOf(factoryIdByName: Record<string, string>, name: string) {
+  const factories = Object.entries(factoryIdByName).map(([factoryName, id]) => ({ id, name: factoryName }))
+  const candidates = [name, name.replace(/[省市县区镇乡]/g, '')]
+  for (const candidate of candidates) {
+    const match = resolveFactoryName(factories, candidate)
+    if (match.status === 'matched') return match.id
+  }
+  return undefined
+}
+
+function labeledValue(cells: any[], label: string, stopLabels: string[]) {
+  const stops = stopLabels.map((v) => v.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')
+  const labelPattern = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const pattern = new RegExp(`(?:^|[\\s　])${labelPattern}\\s*[:：]\\s*([\\s\\S]*?)(?=\\s*(?:${stops})\\s*[:：]|$)`)
+  for (const cell of cells) {
+    const match = cleanText(cell).match(pattern)
+    if (match) return match[1].trim()
+  }
+  return ''
+}
+
+function parsePurchaseOrderImport(
+  aoa: any[][],
+  headerIdx: number,
+  header: string[],
+  factoryIdByName: Record<string, string>,
+): { payloads: Record<string, any>[]; failed: number } {
+  const colOf = (...al: string[]) => { for (const a of al) { const i = header.indexOf(compactText(a)); if (i >= 0) return i } return -1 }
+  const C = {
+    item_no: colOf('款号', '货号'),
+    product: colOf('物料名称', '货物名称', '产品名称'),
+    category: colOf('加工内容', '加工类别'),
+    qty: colOf('数量'),
+    out: colOf('单价', '外发单价', '外发工价'),
+    amount: colOf('金额'),
+    notes: colOf('备注'),
+  }
+  const metaCells = aoa.slice(0, headerIdx).flat()
+  const stopLabels = ['加工厂', '日期', '交货日期', '备注', '单号']
+  const factoryName = labeledValue(metaCells, '加工厂', stopLabels)
+  const orderDate = formatImportDate(labeledValue(metaCells, '日期', stopLabels))
+  const deliveryDate = formatImportDate(labeledValue(metaCells, '交货日期', stopLabels))
+  const metaNotes = labeledValue(metaCells, '备注', stopLabels)
+  const orderNo = labeledValue(metaCells, '单号', stopLabels)
+  const factoryId = factoryIdOf(factoryIdByName, factoryName)
+
+  const payloads: Record<string, any>[] = []
+  let failed = 0
+  const cell = (row: any[], i: number) => (i >= 0 ? row[i] : '')
+  for (const row of aoa.slice(headerIdx + 1)) {
+    const product = cleanText(cell(row, C.product))
+    const itemNo = cleanText(cell(row, C.item_no))
+    if (!product && !itemNo) continue
+    if (!product || !factoryId) { failed++; continue }
+    const qty = parseNumberCell(cell(row, C.qty))
+    const out = parseNumberCell(cell(row, C.out))
+    const amount = parseNumberCell(cell(row, C.amount))
+    const rowNotes = cleanText(cell(row, C.notes))
+    const notes = [metaNotes, rowNotes].filter(Boolean).join(' ')
+    const p: Record<string, any> = {
+      factory: factoryId,
+      product,
+      item_no: itemNo,
+      order_no: orderNo,
+      process_category: cleanText(cell(row, C.category)),
+      notes,
+      status: 'placed',
+      is_delayed: false,
+    }
+    if (qty != null) p.quantity = qty
+    if (orderDate) p.order_date = orderDate
+    if (deliveryDate) p.delivery_date = deliveryDate
+    if (out != null) p.unit_price = out
+    if (amount != null) p.amount = amount
+    else if (qty != null && out != null) p.amount = qty * out
+    payloads.push(p)
+  }
+  return { payloads, failed }
+}
+
+function labeledValues(aoa: any[][], label: string, endRow = aoa.length) {
+  const values: string[] = []
+  const labelKey = compactText(label).replace(/[：:]$/, '')
+  for (const row of aoa.slice(0, endRow)) {
+    for (let i = 0; i < row.length; i++) {
+      const text = cleanText(row[i])
+      const compact = compactText(text)
+      const match = compact.match(new RegExp(`^${labelKey}[：:]?(.*)$`))
+      if (!match) continue
+      if (match[1]) {
+        values.push(match[1].trim())
+        continue
+      }
+      for (let j = i + 1; j < row.length; j++) {
+        const next = cleanText(row[j])
+        if (next) { values.push(next); break }
+      }
+    }
+  }
+  return values
+}
+
+function parseSewingPurchaseOrderImport(
+  aoa: any[][],
+  headerIdx: number,
+  header: string[],
+  factoryIdByName: Record<string, string>,
+): { payloads: Record<string, any>[]; failed: number } {
+  const colContaining = (...aliases: string[]) => header.findIndex((cell) => aliases.some((alias) => cell.includes(compactText(alias))))
+  const C = {
+    item_no: colContaining('合同号/货号', '合同号', '货号'),
+    product: colContaining('货品名称', '货物名称', '物料名称'),
+    qty: colContaining('数量'),
+    out: colContaining('单价'),
+    amount: colContaining('金额'),
+    notes: colContaining('备注'),
+  }
+  const factoryName = labeledValues(aoa, '供应商', headerIdx).at(-1) ?? ''
+  const orderNo = labeledValues(aoa, '订单编号', headerIdx).at(-1) ?? ''
+  const contacts = labeledValues(aoa, '联络人', headerIdx)
+  const pmc = contacts.at(-1) ?? ''
+  const allText = aoa.flat().map(cleanText).filter(Boolean)
+  const orderDateText = labeledValues(aoa, '时间').at(-1) ?? ''
+  const deliveryText = allText.find((text) => /前交货/.test(text) && /\d{4}\s*年/.test(text)) ?? ''
+  const orderDate = formatImportDate(orderDateText)
+  const deliveryDate = formatImportDate(compactText(deliveryText))
+  const factoryId = factoryIdOf(factoryIdByName, factoryName)
+
+  const payloads: Record<string, any>[] = []
+  let failed = 0
+  const cell = (row: any[], i: number) => (i >= 0 ? row[i] : '')
+  for (const row of aoa.slice(headerIdx + 1)) {
+    const itemNo = cleanText(cell(row, C.item_no))
+    const product = cleanText(cell(row, C.product))
+    if (!itemNo && !product) continue
+    if (/合计|小计/.test(itemNo) || /合计|小计/.test(product)) continue
+    if (!product) continue
+    if (!factoryId) { failed++; continue }
+    const qty = parseNumberCell(cell(row, C.qty))
+    const out = parseNumberCell(cell(row, C.out))
+    const amount = parseNumberCell(cell(row, C.amount))
+    const p: Record<string, any> = {
+      factory: factoryId,
+      pmc,
+      product,
+      item_no: itemNo,
+      order_no: orderNo,
+      process_category: '车缝',
+      notes: cleanText(cell(row, C.notes)),
+      status: 'placed',
+      is_delayed: false,
+    }
+    if (qty != null) p.quantity = qty
+    if (out != null) p.unit_price = out
+    if (amount != null) p.amount = amount
+    else if (qty != null && out != null) p.amount = qty * out
+    if (orderDate) p.order_date = orderDate
+    if (deliveryDate) p.delivery_date = deliveryDate
+    payloads.push(p)
+  }
+  return { payloads, failed }
+}
+
 // 解析导入的 Excel(识别表头、跳过小计、加工厂合并向下填充)→ 订单 payload 数组
 export function parseDeliveryImport(
   aoa: any[][],
   factoryIdByName: Record<string, string>,
 ): { payloads: Record<string, any>[]; failed: number } {
-  const norm = (s: any) => String(s).replace(/\s+/g, '')
-  const headerIdx = aoa.findIndex((row) => row.some((c) => ['货号', '物料名称', '订单号'].includes(norm(c))))
+  const norm = compactText
+  const headerIdx = aoa.findIndex((row) => row.some((c) => {
+    const text = norm(c)
+    return ['货号', '款号', '物料名称', '订单号'].includes(text) || text.includes('合同号/货号') || text.includes('货品名称')
+  }))
   if (headerIdx < 0) return { payloads: [], failed: 0 }
   const header = aoa[headerIdx].map(norm)
   const colOf = (...al: string[]) => { for (const a of al) { const i = header.indexOf(norm(a)); if (i >= 0) return i } return -1 }
+  if (header.some((cell) => cell.includes('合同号/货号')) && header.some((cell) => cell.includes('含税价'))) {
+    return parseSewingPurchaseOrderImport(aoa, headerIdx, header, factoryIdByName)
+  }
+  if (header.includes('款号') && header.includes('加工内容') && header.includes('单价')) {
+    return parsePurchaseOrderImport(aoa, headerIdx, header, factoryIdByName)
+  }
   const C = {
-    pmc: colOf('下单PMC'), factory: colOf('加工厂'), item_no: colOf('货号'), order_no: colOf('订单号'),
+    pmc: colOf('下单PMC'), factory: colOf('加工厂'), item_no: colOf('货号', '款号'), order_no: colOf('订单号'),
     category: colOf('加工类别'), product: colOf('物料名称', '产品'), qty: colOf('数量'),
     order_date: colOf('下单时间', '下单日期'), delivery_date: colOf('下单交货时间', '交货日期'),
     actual: colOf('实际交货时间'), delay: colOf('延迟时间'), delayedCnt: colOf('延期单数'),
     inspect: colOf('验货总单数', '来料抽检单数'), qualified: colOf('合格单数'), ret: colOf('客退货单数'),
     quote: colOf('核价工价(港币不含税$)', '核价工价', '核价生产工价'),
-    out: colOf('外发工价(港币不含税$)', '外发工价', '外发单价'), notes: colOf('备注'),
+    out: colOf('外发工价(港币不含税$)', '外发工价', '外发单价', '单价'), notes: colOf('备注'),
   }
   const cell = (row: any[], i: number) => (i >= 0 ? row[i] : '')
-  const toDate = (v: any) => (v instanceof Date ? v.toISOString() : String(v ?? '').trim())
+  const toDate = formatImportDate
   const payloads: Record<string, any>[] = []
   let lastFactory = ''
   let failed = 0
@@ -301,12 +499,13 @@ export function parseDeliveryImport(
     if (fname) lastFactory = fname; else fname = lastFactory
     if (!prod && !fname) continue
     if (!prod) continue
-    if (!fname || !factoryIdByName[fname]) { failed++; continue }
-    const numv = (i: number) => { const v = cell(row, i); return (v === '' || v == null) ? undefined : Number(v) }
+    const factoryId = factoryIdOf(factoryIdByName, fname)
+    if (!fname || !factoryId) { failed++; continue }
+    const numv = (i: number) => parseNumberCell(cell(row, i))
     const str = (i: number) => { const v = cell(row, i); return v == null ? '' : String(v).trim() }
     const inspect = numv(C.inspect), qualified = numv(C.qualified), out = numv(C.out), qty = numv(C.qty)
     const p: Record<string, any> = {
-      factory: factoryIdByName[fname], product: prod, pmc: str(C.pmc), order_no: str(C.order_no),
+      factory: factoryId, product: prod, pmc: str(C.pmc), order_no: str(C.order_no),
       item_no: str(C.item_no), process_category: str(C.category), notes: str(C.notes), status: 'placed',
     }
     if (qty != null) p.quantity = qty

@@ -2,14 +2,20 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { pb } from '../pb'
 import type { MonthlyScore } from '../types/score'
+import { canViewCraft } from '../utils/permissions'
+import type { Craft } from '../constants/roles'
 
 export const useScoresStore = defineStore('scores', () => {
   const items = ref<MonthlyScore[]>([])
 
   async function fetchByMonth(yearMonth: string) {
-    items.value = await pb.collection('monthly_scores').getFullList<MonthlyScore>({
+    const records = await pb.collection('monthly_scores').getFullList<MonthlyScore>({
       filter: `year_month = "${yearMonth}"`,
       expand: 'factory',
+    })
+    items.value = records.filter((item) => {
+      const craft = (item as any).expand?.factory?.craft as Craft | undefined
+      return !craft || canViewCraft(craft)
     })
   }
   async function getOne(factoryId: string, yearMonth: string): Promise<MonthlyScore | null> {

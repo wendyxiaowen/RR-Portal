@@ -17,5 +17,5 @@ export interface Quality5sCheck {
   ip_control?: string
   notes?: string
   created_by?: string
-  expand?: { factory?: { name: string } }
+  expand?: { factory?: { name: string; craft?: string; region?: string } }
 }

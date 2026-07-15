@@ -5,7 +5,7 @@ import * as XLSX from 'xlsx'
 import AppLayout from '../components/AppLayout.vue'
 import { useFactoriesStore, filterByCraft } from '../stores/factories'
 import { useAuthStore } from '../stores/auth'
-import { visibleCraft, canEditFactories, allowedRegions } from '../utils/permissions'
+import { allowedCrafts, canEditFactories, allowedRegions } from '../utils/permissions'
 import { CRAFT_LABELS, REGIONS, REGION_LABELS, regionOf, type Craft, type Region } from '../constants/roles'
 import type { Factory } from '../types/factory'
 
@@ -136,7 +136,8 @@ async function importExcel(ev: Event) {
 }
 
 const visible = computed(() => {
-  const byCraft = filterByCraft(store.items, auth.role ? visibleCraft(auth.role) : null)
+  const allowed = allowedCrafts()
+  const byCraft = filterByCraft(store.items, null).filter((f) => allowed.includes(f.craft))
   const regs = auth.role ? allowedRegions(auth.role) : REGIONS
   return byCraft.filter((f) => regs.includes(regionOf(f)))
 })
@@ -153,7 +154,7 @@ const regionBlocks = computed(() =>
   myRegions.value.map((region) => ({
     region,
     name: REGION_LABELS[region],
-    cards: DEPTS.map((d) => {
+    cards: DEPTS.filter((d) => allowedCrafts().includes(d.craft)).map((d) => {
       const list = visible.value.filter((f: Factory) => regionOf(f) === region && f.craft === d.craft)
       return {
         ...d,

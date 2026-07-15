@@ -21,6 +21,7 @@ routerAdd('POST', '/api/admin/create-user', (e) => {
   rec.set('display_name', b.display_name || '')
   rec.set('role', b.role)
   if (b.craft) rec.set('craft', b.craft)
+  if (Array.isArray(b.crafts)) rec.set('crafts', b.crafts)
   if (b.permissions && typeof b.permissions === 'object') rec.set('permissions', b.permissions)
   $app.save(rec)
   return e.json(200, { ok: true, id: rec.id })

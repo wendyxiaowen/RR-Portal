@@ -1,20 +1,21 @@
 <script setup lang="ts">
 import { ref, watch, onMounted } from 'vue'
 import AppLayout from '../../components/AppLayout.vue'
+import CraftMultiSelect from '../../components/CraftMultiSelect.vue'
 import UserPermsEditor from '../../components/UserPermsEditor.vue'
 import { pb } from '../../pb'
-import { ROLE_LABELS, CRAFT_LABELS, type Role } from '../../constants/roles'
+import { ROLE_LABELS, type Craft, type Role } from '../../constants/roles'
 import { roleDefault } from '../../utils/permissions'
 
 const users = ref<any[]>([])
 const emailEdits = ref<Record<string, string>>({})
 const nameEdits = ref<Record<string, string>>({})
 const roleEdits = ref<Record<string, Role>>({})
-const craftEdits = ref<Record<string, string>>({})
+const craftEdits = ref<Record<string, Craft[]>>({})
 const permEdits = ref<Record<string, Record<string, boolean>>>({})
 const permOpen = ref<Record<string, boolean>>({})
-const draft = ref<{ email: string; password: string; display_name: string; role: Role; craft: string }>({
-  email: '', password: '', display_name: '', role: 'buyer_injection', craft: '',
+const draft = ref<{ email: string; password: string; display_name: string; role: Role; crafts: Craft[] }>({
+  email: '', password: '', display_name: '', role: 'buyer_injection', crafts: [],
 })
 const draftPerm = ref<Record<string, boolean>>(roleDefault('buyer_injection'))
 
@@ -36,7 +37,7 @@ async function load() {
     emailEdits.value[u.id] = u.email ?? ''
     nameEdits.value[u.id] = u.display_name ?? ''
     roleEdits.value[u.id] = u.role as Role
-    craftEdits.value[u.id] = u.craft ?? ''
+    craftEdits.value[u.id] = Array.isArray(u.crafts) && u.crafts.length ? [...u.crafts] : (u.craft ? [u.craft] : [])
     permEdits.value[u.id] = { ...roleDefault(u.role as Role), ...(u.permissions ?? {}) }
   }
 }
@@ -53,11 +54,12 @@ async function createUser() {
         password: draft.value.password,
         display_name: draft.value.display_name,
         role: draft.value.role,
-        craft: draft.value.craft || '',
+        crafts: draft.value.crafts,
+        craft: draft.value.crafts[0] || '',
         permissions: deltaOf(draft.value.role, draftPerm.value),
       },
     })
-    draft.value = { email: '', password: '', display_name: '', role: 'buyer_injection', craft: '' }
+    draft.value = { email: '', password: '', display_name: '', role: 'buyer_injection', crafts: [] }
     draftPerm.value = roleDefault('buyer_injection')
     await load()
     alert('用户已创建')
@@ -71,11 +73,14 @@ async function saveRow(u: any) {
   try {
     const name = (nameEdits.value[u.id] ?? '').trim()
     const role = roleEdits.value[u.id]
-    const craft = craftEdits.value[u.id] ?? ''
+    const crafts = craftEdits.value[u.id] ?? []
+    const craft = crafts[0] ?? ''
     const permObj = deltaOf(role, permEdits.value[u.id] ?? {})
     const permChanged = JSON.stringify(permObj) !== JSON.stringify(u.permissions ?? {})
-    if (name !== (u.display_name ?? '') || role !== u.role || craft !== (u.craft ?? '') || permChanged) {
-      await pb.collection('users').update(u.id, { display_name: name, role, craft, permissions: permObj })
+    const originalCrafts = Array.isArray(u.crafts) && u.crafts.length ? u.crafts : (u.craft ? [u.craft] : [])
+    const craftsChanged = JSON.stringify(crafts) !== JSON.stringify(originalCrafts)
+    if (name !== (u.display_name ?? '') || role !== u.role || craftsChanged || permChanged) {
+      await pb.collection('users').update(u.id, { display_name: name, role, craft, crafts, permissions: permObj })
     }
     const email = (emailEdits.value[u.id] ?? '').trim()
     if (email && email !== u.email) {
@@ -106,9 +111,10 @@ async function resetPassword(u: any) {
 }
 
 function rowChanged(u: any): boolean {
+  const originalCrafts = Array.isArray(u.crafts) && u.crafts.length ? u.crafts : (u.craft ? [u.craft] : [])
   return (nameEdits.value[u.id] ?? '') !== (u.display_name ?? '')
     || roleEdits.value[u.id] !== u.role
-    || (craftEdits.value[u.id] ?? '') !== (u.craft ?? '')
+    || JSON.stringify(craftEdits.value[u.id] ?? []) !== JSON.stringify(originalCrafts)
     || (emailEdits.value[u.id] ?? '') !== (u.email ?? '')
     || JSON.stringify(deltaOf(roleEdits.value[u.id], permEdits.value[u.id] ?? {})) !== JSON.stringify(u.permissions ?? {})
 }
@@ -118,7 +124,7 @@ function rowChanged(u: any): boolean {
     <div class="page">
     <h2>用户管理</h2>
     <table>
-      <thead><tr><th>姓名</th><th>邮箱</th><th>角色</th><th>部门</th><th>操作</th></tr></thead>
+      <thead><tr><th>姓名</th><th>邮箱</th><th>角色</th><th>部门权限</th><th>操作</th></tr></thead>
       <tbody>
         <template v-for="u in users" :key="u.id">
           <tr>
@@ -130,10 +136,7 @@ function rowChanged(u: any): boolean {
               </select>
             </td>
             <td>
-              <select v-model="craftEdits[u.id]">
-                <option value="">无部门</option>
-                <option v-for="(label, key) in CRAFT_LABELS" :key="key" :value="key">{{ label }}</option>
-              </select>
+              <CraftMultiSelect v-model="craftEdits[u.id]" />
             </td>
             <td class="ops">
               <button class="ghost mini" @click="permOpen[u.id] = !permOpen[u.id]">权限</button>
@@ -160,10 +163,7 @@ function rowChanged(u: any): boolean {
       <select v-model="draft.role">
         <option v-for="(label, key) in ROLE_LABELS" :key="key" :value="key">{{ label }}</option>
       </select>
-      <select v-model="draft.craft">
-        <option value="">无部门</option>
-        <option v-for="(label, key) in CRAFT_LABELS" :key="key" :value="key">{{ label }}</option>
-      </select>
+      <CraftMultiSelect v-model="draft.crafts" />
       <button type="submit">创建</button>
     </form>
     <div class="create-perm">

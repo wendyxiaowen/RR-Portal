@@ -4,15 +4,13 @@ import { RouterLink } from 'vue-router'
 import AppLayout from '../components/AppLayout.vue'
 import { useFactoriesStore, filterByCraft } from '../stores/factories'
 import { useScoresStore } from '../stores/scores'
-import { useAuthStore } from '../stores/auth'
-import { visibleCraft } from '../utils/permissions'
-import { CRAFT_LABELS } from '../constants/roles'
+import { allowedCrafts } from '../utils/permissions'
+import { CRAFT_LABELS, type Craft } from '../constants/roles'
 import type { MonthlyScore } from '../types/score'
 
 const month = ref(new Date().toISOString().slice(0, 7))
 const factories = useFactoriesStore()
 const scores = useScoresStore()
-const auth = useAuthStore()
 const deptFilter = ref('')
 
 const gradeCls: Record<string, string> = { A: 'badge-A', B: 'badge-B', C: 'badge-C', D: 'badge-D' }
@@ -26,7 +24,7 @@ const scoreByFactory = computed(() => {
 })
 
 const rows = computed(() => {
-  let list = filterByCraft(factories.items, auth.role ? visibleCraft(auth.role) : null)
+  let list = filterByCraft(factories.items, null).filter((f) => allowedCrafts().includes(f.craft))
   if (deptFilter.value) list = list.filter((f) => f.craft === deptFilter.value)
   return list
 })
@@ -45,7 +43,7 @@ load()
         <span class="spacer"></span>
         <select v-model="deptFilter">
           <option value="">全部部门</option>
-          <option v-for="(label, key) in CRAFT_LABELS" :key="key" :value="key">{{ label }}</option>
+          <option v-for="craft in allowedCrafts()" :key="craft" :value="craft">{{ CRAFT_LABELS[craft as Craft] }}</option>
         </select>
         <label>月份 <input v-model="month" type="month" @change="load" /></label>
       </div>

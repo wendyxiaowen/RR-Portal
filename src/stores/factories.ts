@@ -3,6 +3,7 @@ import { ref } from 'vue'
 import { pb } from '../pb'
 import type { Factory } from '../types/factory'
 import type { Craft } from '../constants/roles'
+import { canViewCraft } from '../utils/permissions'
 
 export function filterByCraft(list: Factory[], craft: Craft | null): Factory[] {
   if (!craft) return list
@@ -16,13 +17,16 @@ export const useFactoriesStore = defineStore('factories', () => {
   async function fetchAll() {
     loading.value = true
     try {
-      items.value = await pb.collection('factories').getFullList<Factory>({ sort: 'name' })
+      const records = await pb.collection('factories').getFullList<Factory>({ sort: 'name' })
+      items.value = records.filter((factory) => canViewCraft(factory.craft))
     } finally {
       loading.value = false
     }
   }
   async function get(id: string) {
-    return pb.collection('factories').getOne<Factory>(id)
+    const factory = await pb.collection('factories').getOne<Factory>(id)
+    if (!canViewCraft(factory.craft)) throw new Error('无权访问该部门')
+    return factory
   }
   async function create(data: Partial<Factory> | FormData) {
     return pb.collection('factories').create<Factory>(data)

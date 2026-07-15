@@ -4,7 +4,7 @@ import { RouterLink } from 'vue-router'
 import AppLayout from '../components/AppLayout.vue'
 import { useOrdersStore } from '../stores/orders'
 import { useAuthStore } from '../stores/auth'
-import { visibleCraft, allowedRegions } from '../utils/permissions'
+import { allowedCrafts, allowedRegions } from '../utils/permissions'
 import { REGIONS, REGION_LABELS, regionOf, type Craft } from '../constants/roles'
 
 const orders = useOrdersStore()
@@ -18,8 +18,7 @@ const DEPTS: { craft: Craft; name: string; icon: string }[] = [
   { craft: 'assembly', name: '装配部', icon: '🔧' },
   { craft: 'sewing', name: '车缝部', icon: '🧵' },
 ]
-const mine = computed(() => (auth.role ? visibleCraft(auth.role) : null))
-const visibleDepts = computed(() => DEPTS.filter((d) => !mine.value || d.craft === mine.value))
+const visibleDepts = computed(() => DEPTS.filter((d) => allowedCrafts().includes(d.craft)))
 const myRegions = computed(() => (auth.role ? allowedRegions(auth.role) : REGIONS))
 const regionBlocks = computed(() =>
   myRegions.value.map((region) => ({

@@ -5,8 +5,8 @@ import { useFactoriesStore } from '../stores/factories'
 import { useOutputStore } from '../stores/output'
 import { useOrdersStore } from '../stores/orders'
 import { useAuthStore } from '../stores/auth'
-import { allowedRegions } from '../utils/permissions'
-import { CRAFT_LABELS, REGION_LABELS, regionOf, type Region } from '../constants/roles'
+import { allowedCrafts, allowedRegions } from '../utils/permissions'
+import { CRAFT_LABELS, REGION_LABELS, regionOf, type Craft, type Region } from '../constants/roles'
 
 const month = ref(new Date().toISOString().slice(0, 7))
 const factories = useFactoriesStore()
@@ -24,6 +24,7 @@ const filteredFactories = computed(() => {
   const kw = search.value.trim().toLowerCase()
   return factories.items.filter((f) => {
     if (!myRegions.value.includes(regionOf(f))) return false
+    if (!allowedCrafts().includes(f.craft)) return false
     if (regionFilter.value && regionOf(f) !== regionFilter.value) return false
     if (deptFilter.value && f.craft !== deptFilter.value) return false
     if (!kw) return true
@@ -100,7 +101,7 @@ async function save(factoryId: string) {
       </select>
       <select v-model="deptFilter">
         <option value="">全部部门</option>
-        <option v-for="(label, key) in CRAFT_LABELS" :key="key" :value="key">{{ label }}</option>
+        <option v-for="craft in allowedCrafts()" :key="craft" :value="craft">{{ CRAFT_LABELS[craft as Craft] }}</option>
       </select>
       <input v-model="search" placeholder="搜索工厂 / 部门" />
       <button class="ghost" @click="exportExcel">导出 Excel</button>

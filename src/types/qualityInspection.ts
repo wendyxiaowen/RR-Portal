@@ -16,5 +16,5 @@ export interface QualityInspection {
   cust_defect?: string
   notes?: string
   created_by?: string
-  expand?: { factory?: { name: string } }
+  expand?: { factory?: { name: string; craft?: string; region?: string } }
 }

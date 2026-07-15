@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
-import { canAccessPath } from '../utils/permissions'
+import { canAccessPath, canViewCraft } from '../utils/permissions'
+import type { Craft } from '../constants/roles'
 
 const routes: RouteRecordRaw[] = [
   { path: '/login', component: () => import('../views/LoginView.vue'), meta: { public: true } },
@@ -42,6 +43,8 @@ router.beforeEach((to) => {
   const auth = useAuthStore()
   if (!to.meta.public && !auth.isLoggedIn) return '/login'
   if (auth.role && !canAccessPath(auth.role, to.path)) return '/dashboard'
+  const craft = to.params.craft as Craft | undefined
+  if (craft && !canViewCraft(craft)) return '/dashboard'
   return true
 })
 

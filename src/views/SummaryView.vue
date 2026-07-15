@@ -6,7 +6,7 @@ import { pb } from '../pb'
 import { useOrdersStore } from '../stores/orders'
 import { useFactoriesStore } from '../stores/factories'
 import { useAuthStore } from '../stores/auth'
-import { allowedRegions } from '../utils/permissions'
+import { allowedCrafts, allowedRegions } from '../utils/permissions'
 import { REGION_LABELS, regionOf, CRAFT_LABELS, type Region, type Craft } from '../constants/roles'
 import type { Order } from '../types/order'
 import type { Factory } from '../types/factory'
@@ -20,7 +20,7 @@ const search = ref<string>('')
 const myRegions = computed(() => (auth.role ? allowedRegions(auth.role) : ['dongguan', 'hunan', 'heyuan'] as Region[]))
 const regionFilter = ref<Region | ''>('')
 const craftFilter = ref<Craft | ''>('')
-const CRAFT_OPTIONS = Object.keys(CRAFT_LABELS) as Craft[]
+const CRAFT_OPTIONS = computed(() => allowedCrafts())
 
 onMounted(async () => {
   await Promise.all([orders.fetchAll(), factories.fetchAll()])
@@ -175,7 +175,7 @@ function exportExcel() {
         </select>
         <select v-model="craftFilter" class="region-sel">
           <option value="">全部部门</option>
-          <option v-for="c in CRAFT_OPTIONS" :key="c" :value="c">{{ CRAFT_LABELS[c] }}</option>
+          <option v-for="c in CRAFT_OPTIONS" :key="c" :value="c">{{ CRAFT_LABELS[c as Craft] }}</option>
         </select>
         <span class="spacer"></span>
         <input class="search-box" v-model="search" placeholder="搜索 厂名/联系人/加工类型" />

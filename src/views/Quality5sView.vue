@@ -6,8 +6,8 @@ import AppLayout from '../components/AppLayout.vue'
 import { pb } from '../pb'
 import { useFactoriesStore } from '../stores/factories'
 import { useAuthStore } from '../stores/auth'
-import { canEditQuality, allowedRegions } from '../utils/permissions'
-import { REGIONS, REGION_LABELS, regionOf, type Region } from '../constants/roles'
+import { canEditQuality, allowedRegions, canViewCraft } from '../utils/permissions'
+import { REGIONS, REGION_LABELS, regionOf, type Craft, type Region } from '../constants/roles'
 import type { Quality5sCheck } from '../types/quality5s'
 
 const factories = useFactoriesStore()
@@ -30,6 +30,7 @@ function matchesSearch(r: Quality5sCheck): boolean {
 
 const filteredRecords = computed(() =>
   records.value
+    .filter((r) => !r.expand?.factory?.craft || canViewCraft(r.expand.factory.craft as Craft))
     .filter((r) => myRegions.value.includes(regionOf(r.expand?.factory)))
     .filter((r) => !regionFilter.value || regionOf(r.expand?.factory) === regionFilter.value)
     .filter(matchesSearch))

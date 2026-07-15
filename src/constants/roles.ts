@@ -28,6 +28,7 @@ export const ROLE_LABELS: Record<Role, string> = {
 export const CRAFT_LABELS: Record<Craft, string> = {
   injection: '注塑部', painting: '喷油部', assembly: '装配部', sewing: '车缝部',
 }
+export const CRAFTS = Object.keys(CRAFT_LABELS) as Craft[]
 
 // 采购角色 → 其负责的工艺
 export const BUYER_CRAFT: Partial<Record<Role, Craft>> = {
