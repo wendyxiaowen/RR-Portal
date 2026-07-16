@@ -45,8 +45,25 @@ nginx -t && systemctl reload nginx
 ```
 
 ## 5. 首次初始化
-- 访问 `https://your-domain.com/_/` 创建超级管理员
-- 用 `/admin/users` 创建各岗位账号（采购按工艺设 craft）
+首次启动会由 `1784190320_seed_existing_snapshot.js` 恢复已批准的业务数据和用户资料。
+
+> 安全提示：种子迁移不包含原密码哈希、Token、OTP、MFA 或登录会话。
+> 所有新建的用户和超级管理员都使用运行时随机密码，原密码无法登录。
+
+1. 在服务器上为超级管理员设置新密码：
+   ```bash
+   /opt/factory-review/pocketbase superuser upsert admin@example.com 'NEW-STRONG-PASSWORD' \
+     --dir=/opt/factory-review/pb_data \
+     --migrationsDir=/opt/factory-review/pb_migrations
+   ```
+2. 访问 `https://your-domain.com/_/` 登录 PocketBase 后台。
+3. 通过系统的用户管理为各业务账号重置密码。
+
+需要从当前本地数据库重新生成安全快照时，在本地项目目录执行：
+```bash
+npm run seed:export
+```
+生成器会拒绝输出包含原密码哈希或 Token 的迁移文件。
 
 ## 6. 备份（每日凌晨2点）
 ```bash
