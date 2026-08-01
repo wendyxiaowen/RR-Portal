@@ -8,7 +8,7 @@ import { useAuthStore } from '../stores/auth'
 import { canEditOrders } from '../utils/permissions'
 import { CRAFT_LABELS, type Craft } from '../constants/roles'
 import type { Order } from '../types/order'
-import { cnyTaxToHkdUntaxed, DEFAULT_CNY_TO_HKD_RATE } from '../utils/orderPricing'
+import { cnyTaxToHkdUntaxed, cnyTaxToUntaxedRmb, DEFAULT_CNY_TO_HKD_RATE } from '../utils/orderPricing'
 
 const route = useRoute()
 const orders = useOrdersStore()
@@ -54,7 +54,9 @@ watch(() => [price.unit_price_cny_tax, price.exchange_rate], ([value, rate]) => 
   const cnyTaxPrice = Number(value)
   const exchangeRate = Number(rate)
   if (Number.isFinite(cnyTaxPrice) && Number.isFinite(exchangeRate) && exchangeRate > 0) {
-    price.unit_price = cnyTaxToHkdUntaxed(cnyTaxPrice, exchangeRate)
+    price.unit_price = craft.value === 'sewing'
+      ? cnyTaxToUntaxedRmb(cnyTaxPrice, exchangeRate)
+      : cnyTaxToHkdUntaxed(cnyTaxPrice, exchangeRate)
   }
 })
 
@@ -175,9 +177,11 @@ async function savePrice() {
           <label>加工类别 <input v-model="price.process_category" placeholder="如塑胶半成品" /></label>
           <label>核价生产工价 <input v-model.number="price.quote_labor_price" type="number" min="0" step="0.01" /></label>
           <label>供应商外发价 <input v-model.number="price.supplier_price" type="number" min="0" step="0.01" /></label>
-          <label>外发单价 <input v-model.number="price.unit_price" type="number" min="0" step="0.0001" /></label>
+          <label>{{ craft === 'sewing' ? '外发工价(不含税RMB)' : '外发单价' }}
+            <input v-model.number="price.unit_price" type="number" min="0" step="0.0001" :readonly="craft === 'sewing'" />
+          </label>
           <label>外发工价(人民币含税) <input v-model.number="price.unit_price_cny_tax" type="number" min="0" step="0.0001" /></label>
-          <label>换算汇率 <input v-model.number="price.exchange_rate" type="number" min="0.0001" step="0.01" /></label>
+          <label>{{ craft === 'sewing' ? '税点' : '换算汇率' }} <input v-model.number="price.exchange_rate" type="number" min="0.0001" step="0.01" /></label>
           <div class="actions">
             <button type="submit" :disabled="priceSaving">{{ priceSaving ? '保存中…' : '保存' }}</button>
             <span v-if="priceSaved" class="ok">已保存 ✓</span>

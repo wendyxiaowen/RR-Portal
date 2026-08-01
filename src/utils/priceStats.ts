@@ -1,4 +1,5 @@
 import type { Order } from '../types/order'
+import { cnyTaxToUntaxedRmb } from './orderPricing'
 
 export interface PriceStatsRow {
   workshop: string
@@ -9,6 +10,7 @@ export interface PriceStatsRow {
   quote_labor_price: number | null
   supplier_price: number | null
   unit_price: number | null
+  tax_point: number | null
   after_tax: number | null
   ratio_pct: number | null
   manager_rating: number | null
@@ -32,6 +34,11 @@ export function ratioPct(unitPrice?: number | null, quoteLaborPrice?: number | n
   return Math.round((at / quoteLaborPrice) * 1000) / 10
 }
 
+function ratioFromPrice(price?: number | null, quoteLaborPrice?: number | null): number | null {
+  if (price == null || !quoteLaborPrice) return null
+  return Math.round((price / quoteLaborPrice) * 1000) / 10
+}
+
 const SEP = ' '
 function computeSpan(
   rows: PriceStatsRow[],
@@ -51,24 +58,37 @@ function computeSpan(
 export function buildPriceStatsRows(
   orders: Order[],
   factoryName: (o: Order) => string,
+  useSewingPrices = false,
 ): PriceStatsRow[] {
-  const rows: PriceStatsRow[] = orders.map((o) => ({
-    workshop: o.workshop ?? '',
-    factory: factoryName(o),
-    category: o.process_category ?? '',
-    item_no: o.item_no ?? '',
-    product: o.product ?? '',
-    quote_labor_price: o.quote_labor_price ?? null,
-    supplier_price: o.supplier_price ?? null,
-    unit_price: o.unit_price ?? null,
-    after_tax: afterTax(o.unit_price),
-    ratio_pct: ratioPct(o.unit_price, o.quote_labor_price),
-    manager_rating: o.manager_rating ?? null,
-    notes: o.notes ?? '',
-    workshopSpan: 0,
-    factorySpan: 0,
-    categorySpan: 0,
-  }))
+  const rows: PriceStatsRow[] = orders.map((o) => {
+    const cnyTaxPrice = o.unit_price_cny_tax ?? null
+    const taxPoint = Number(o.exchange_rate)
+    const sewingUntaxedPrice = cnyTaxPrice != null && Number.isFinite(taxPoint) && taxPoint > 0
+      ? cnyTaxToUntaxedRmb(cnyTaxPrice, taxPoint)
+      : o.unit_price ?? null
+    const unitPrice = useSewingPrices ? cnyTaxPrice : o.unit_price ?? null
+    const comparedPrice = useSewingPrices ? sewingUntaxedPrice : afterTax(o.unit_price)
+    return {
+      workshop: o.workshop ?? '',
+      factory: factoryName(o),
+      category: o.process_category ?? '',
+      item_no: o.item_no ?? '',
+      product: o.product ?? '',
+      quote_labor_price: o.quote_labor_price ?? null,
+      supplier_price: o.supplier_price ?? null,
+      unit_price: unitPrice,
+      tax_point: useSewingPrices && Number.isFinite(taxPoint) ? taxPoint : null,
+      after_tax: comparedPrice,
+      ratio_pct: useSewingPrices
+        ? ratioFromPrice(comparedPrice, o.quote_labor_price)
+        : ratioPct(o.unit_price, o.quote_labor_price),
+      manager_rating: o.manager_rating ?? null,
+      notes: o.notes ?? '',
+      workshopSpan: 0,
+      factorySpan: 0,
+      categorySpan: 0,
+    }
+  })
   // 排序保证同组相邻：车间 → 加工厂 → 加工类别
   rows.sort((a, b) =>
     a.workshop.localeCompare(b.workshop) ||

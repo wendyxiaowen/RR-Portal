@@ -41,7 +41,12 @@ const regionBlocks = computed(() =>
 
 const fname = (o: any) => o.expand?.factory?.name ?? ''
 function craftRows(craft: Craft): ReportRow[] {
-  return buildDeliveryReport(orders.items.filter((o) => o.expand?.factory?.craft === craft), CRAFT_LABELS[craft], fname)
+  return buildDeliveryReport(
+    orders.items.filter((o) => o.expand?.factory?.craft === craft),
+    CRAFT_LABELS[craft],
+    fname,
+    craft === 'sewing',
+  )
 }
 // craft=null 导出全部(各部门拼接);指定部门只导该部门
 function exportExcel(craft: Craft | null) {
