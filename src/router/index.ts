@@ -10,6 +10,7 @@ const routes: RouteRecordRaw[] = [
   { path: '/grade/:month/:grade', component: () => import('../views/GradeDetailView.vue') },
   { path: '/factories', component: () => import('../views/FactoryListView.vue') },
   { path: '/factory-view', component: () => import('../views/FactoryAdminView.vue') },
+  { path: '/factory-view/dept/:craft/summary', component: () => import('../views/FactoryDeptSummaryView.vue') },
   { path: '/factory-view/dept/:craft', component: () => import('../views/FactoryAdminDeptView.vue') },
   { path: '/factory-view/:id', component: () => import('../views/FactoryViewDetail.vue') },
   { path: '/factories/new', component: () => import('../views/FactoryDetailView.vue') },
@@ -37,7 +38,7 @@ const routes: RouteRecordRaw[] = [
   { path: '/admin/users', component: () => import('../views/admin/UserAdminView.vue'), meta: { adminOnly: true } },
 ]
 
-export const router = createRouter({ history: createWebHistory(), routes })
+export const router = createRouter({ history: createWebHistory(import.meta.env.BASE_URL), routes })
 
 router.beforeEach((to) => {
   const auth = useAuthStore()
@@ -58,7 +59,7 @@ router.onError((err, to) => {
     // 10 秒内只自动刷新一次，避免极端情况下反复刷新
     if (Date.now() - last > 10000) {
       sessionStorage.setItem(key, String(Date.now()))
-      window.location.assign(to?.fullPath || window.location.href)
+      window.location.assign(to ? router.resolve(to).href : window.location.href)
     }
   }
 })
