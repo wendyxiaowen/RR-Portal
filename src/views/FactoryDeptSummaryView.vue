@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
+import XLSX from 'xlsx-js-style'
 import AppLayout from '../components/AppLayout.vue'
 import { pb } from '../pb'
 import { useAuthStore } from '../stores/auth'
@@ -10,6 +11,7 @@ import { allowedRegions } from '../utils/permissions'
 import { computeFactoryStats, computeSiteStats, type FactoryStats } from '../utils/factoryStats'
 import type { Factory } from '../types/factory'
 import type { Order } from '../types/order'
+import { FACTORY_SUMMARY_HEADERS, factorySummaryExportRow } from '../utils/factorySummaryExcel'
 
 const route = useRoute()
 const factoriesStore = useFactoriesStore()
@@ -27,9 +29,16 @@ const backTo = computed(() => ({
 const loading = ref(true)
 const error = ref('')
 const factoryCount = ref(0)
-const stats = ref<FactoryStats | null>(null)
-const siteScore = ref<string>('-')
-const siteRate = ref<string>('-')
+interface FactorySummary {
+  factory: Factory
+  stats: FactoryStats
+  siteScore: number | string
+  siteRate: string
+}
+const summaries = ref<FactorySummary[]>([])
+const totalStats = ref<FactoryStats | null>(null)
+const totalSiteScore = ref<string>('-')
+const totalSiteRate = ref<string>('-')
 
 function average(values: number[]) {
   if (!values.length) return null
@@ -40,6 +49,79 @@ function formatNumber(value: number | null, suffix = '') {
   if (value == null) return '-'
   const rounded = Math.round(value * 100) / 100
   return `${rounded.toFixed(2).replace(/\.00$/, '').replace(/(\.\d)0$/, '$1')}${suffix}`
+}
+
+function exportExcel() {
+  if (!summaries.value.length || !totalStats.value) return
+  const title = `${deptName.value}加工厂汇总表`
+  const detailRows = summaries.value.map((summary) => factorySummaryExportRow({
+    name: summary.factory.name,
+    stats: summary.stats,
+    siteScore: summary.siteScore,
+    siteRate: summary.siteRate,
+  }))
+  const totalRow = factorySummaryExportRow({
+    name: `${factoryCount.value} 家工厂总计`,
+    stats: totalStats.value,
+    siteScore: totalSiteScore.value,
+    siteRate: totalSiteRate.value,
+  })
+  const aoa = [
+    [title, ...Array(FACTORY_SUMMARY_HEADERS.length - 1).fill('')],
+    [...FACTORY_SUMMARY_HEADERS],
+    ...detailRows,
+    totalRow,
+  ]
+  const ws = XLSX.utils.aoa_to_sheet(aoa)
+  const lastRow = aoa.length
+  const lastCol = FACTORY_SUMMARY_HEADERS.length - 1
+  ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: lastCol } }]
+  ws['!autofilter'] = { ref: `A2:${XLSX.utils.encode_col(lastCol)}${lastRow}` }
+  ws['!cols'] = [
+    { wch: 32 },
+    { wch: 15 }, { wch: 15 }, { wch: 12 },
+    { wch: 13 }, { wch: 12 }, { wch: 12 }, { wch: 16 },
+    { wch: 13 }, { wch: 12 }, { wch: 12 },
+    { wch: 12 }, { wch: 16 },
+  ]
+  ws['!rows'] = [{ hpt: 28 }, { hpt: 24 }]
+
+  const titleCell = ws.A1
+  titleCell.s = {
+    fill: { fgColor: { rgb: '4F46E5' } },
+    font: { bold: true, color: { rgb: 'FFFFFF' }, sz: 16 },
+    alignment: { horizontal: 'center', vertical: 'center' },
+  }
+  const headerColors = ['64748B', '4F46E5', '4F46E5', '4F46E5', 'D97706', 'D97706', 'D97706', 'D97706', '0D9488', '0D9488', '0D9488', '16A34A', '16A34A']
+  for (let col = 0; col <= lastCol; col++) {
+    const cell = ws[XLSX.utils.encode_cell({ r: 1, c: col })]
+    cell.s = {
+      fill: { fgColor: { rgb: headerColors[col] } },
+      font: { bold: true, color: { rgb: 'FFFFFF' } },
+      alignment: { horizontal: 'center', vertical: 'center', wrapText: true },
+      border: { bottom: { style: 'medium', color: { rgb: 'D1D5DB' } } },
+    }
+  }
+  for (let row = 2; row < lastRow; row++) {
+    for (let col = 0; col <= lastCol; col++) {
+      const cell = ws[XLSX.utils.encode_cell({ r: row, c: col })]
+      if (!cell) continue
+      cell.s = {
+        fill: { fgColor: { rgb: row === lastRow - 1 ? 'EEF2FF' : (row % 2 ? 'F8FAFC' : 'FFFFFF') } },
+        font: { bold: row === lastRow - 1 },
+        alignment: { horizontal: col === 0 ? 'left' : 'right', vertical: 'center' },
+        border: { bottom: { style: 'thin', color: { rgb: 'E5E7EB' } } },
+      }
+      if ([1, 2].includes(col)) cell.z = '#,##0.00'
+      else if ([3, 6, 10, 12].includes(col)) cell.z = '0.00%'
+      else if ([4, 5, 8, 9].includes(col)) cell.z = '#,##0'
+      else if ([7, 11].includes(col)) cell.z = '0.00'
+    }
+  }
+
+  const wb = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(wb, ws, '汇总表')
+  XLSX.writeFile(wb, `${title}.xlsx`)
 }
 
 onMounted(async () => {
@@ -57,21 +139,33 @@ onMounted(async () => {
       pb.collection('quality_5s_checks').getFullList({ sort: '-check_date' }),
     ])
 
-    const deptOrders = orders.filter((order) => factoryIds.has(order.factory))
-    const deptInspections = (inspections as any[]).filter((record) => factoryIds.has(record.factory))
-    stats.value = computeFactoryStats(deptOrders, deptInspections)
-
     const latestCheckByFactory = new Map<string, any>()
     for (const check of checks as any[]) {
       if (factoryIds.has(check.factory) && !latestCheckByFactory.has(check.factory)) {
         latestCheckByFactory.set(check.factory, check)
       }
     }
-    const siteStats = [...latestCheckByFactory.values()].map((check) => computeSiteStats([check]))
-    siteScore.value = formatNumber(average(siteStats.map((item) => item.siteScore)))
-    siteRate.value = formatNumber(average(siteStats
+    const deptOrders = orders.filter((order) => factoryIds.has(order.factory))
+    const deptInspections = (inspections as any[]).filter((record) => factoryIds.has(record.factory))
+    const deptSiteStats = [...latestCheckByFactory.values()].map((check) => computeSiteStats([check]))
+    totalStats.value = computeFactoryStats(deptOrders, deptInspections)
+    totalSiteScore.value = formatNumber(average(deptSiteStats.map((item) => item.siteScore)))
+    totalSiteRate.value = formatNumber(average(deptSiteStats
       .map((item) => Number.parseFloat(item.finalRate))
       .filter((value) => Number.isFinite(value))), '%')
+
+    summaries.value = targetFactories.map((factory) => {
+      const factoryOrders = orders.filter((order) => order.factory === factory.id)
+      const factoryInspections = (inspections as any[]).filter((record) => record.factory === factory.id)
+      const latestCheck = latestCheckByFactory.get(factory.id)
+      const site = latestCheck ? computeSiteStats([latestCheck]) : null
+      return {
+        factory,
+        stats: computeFactoryStats(factoryOrders, factoryInspections),
+        siteScore: site?.siteScore ?? '-',
+        siteRate: site?.finalRate ?? '-',
+      }
+    }).sort((a, b) => a.factory.name.localeCompare(b.factory.name, 'zh-CN'))
   } catch (cause) {
     error.value = cause instanceof Error ? cause.message : '汇总数据加载失败'
   } finally {
@@ -87,37 +181,78 @@ onMounted(async () => {
         <RouterLink :to="backTo" class="back">← 工厂列表</RouterLink>
         <h2 style="margin:0">{{ deptName }} · 汇总</h2>
         <span class="muted">共 {{ factoryCount }} 家</span>
+        <span class="spacer"></span>
+        <button :disabled="loading || !!error || !summaries.length" @click="exportExcel">导出 Excel</button>
       </div>
 
       <div v-if="loading" class="state">正在汇总数据...</div>
       <div v-else-if="error" class="state error">{{ error }}</div>
-      <section v-else-if="stats" class="metrics-grid">
-        <article class="metric-card price-card">
-          <h3><span class="metric-icon">💰</span>价格</h3>
-          <div class="metric-line"><span>核价总金额</span><b>{{ stats.quoteAmount }}</b></div>
-          <div class="metric-line"><span>外发总金额</span><b>{{ stats.outAmount }}</b></div>
-          <div class="metric-line highlight"><span>占比</span><b>{{ stats.amountRatio }}</b></div>
+      <div v-else-if="!summaries.length" class="state">该部门暂无加工厂</div>
+      <section v-else class="factory-comparison">
+        <article v-for="summary in summaries" :key="summary.factory.id" class="factory-summary">
+          <h3 class="factory-name">{{ summary.factory.name }}</h3>
+          <div class="metrics-grid">
+            <div class="metric-card price-card">
+              <h4><span class="metric-icon">💰</span>价格</h4>
+              <div class="metric-line"><span>核价总金额</span><b>{{ summary.stats.quoteAmount }}</b></div>
+              <div class="metric-line"><span>外发总金额</span><b>{{ summary.stats.outAmount }}</b></div>
+              <div class="metric-line highlight"><span>占比</span><b>{{ summary.stats.amountRatio }}</b></div>
+            </div>
+
+            <div class="metric-card delivery-card">
+              <h4><span class="metric-icon">📅</span>交期</h4>
+              <div class="metric-line"><span>订单总单数</span><b>{{ summary.stats.orderCount }}</b></div>
+              <div class="metric-line"><span>延期单数</span><b>{{ summary.stats.delayedCount }}</b></div>
+              <div class="metric-line highlight"><span>占比</span><b>{{ summary.stats.delayRatio }}</b></div>
+              <div class="metric-line"><span>延期平均天数</span><b>{{ summary.stats.delayDaysAvg }}</b></div>
+            </div>
+
+            <div class="metric-card quality-card">
+              <h4><span class="metric-icon">🔍</span>品质</h4>
+              <div class="metric-line"><span>验货总单数</span><b>{{ summary.stats.intInspect }}</b></div>
+              <div class="metric-line"><span>合格单数</span><b>{{ summary.stats.intPass }}</b></div>
+              <div class="metric-line highlight"><span>合格率</span><b>{{ summary.stats.intRate }}</b></div>
+            </div>
+
+            <div class="metric-card site-card">
+              <h4><span class="metric-icon">🧹</span>现场管理</h4>
+              <div class="metric-line"><span>现场得分</span><b>{{ summary.siteScore }}</b></div>
+              <div class="metric-line"><span>折算总达成率</span><b class="site-rate">{{ summary.siteRate }}</b></div>
+            </div>
+          </div>
         </article>
 
-        <article class="metric-card delivery-card">
-          <h3><span class="metric-icon">📅</span>交期</h3>
-          <div class="metric-line"><span>订单总单数</span><b>{{ stats.orderCount }}</b></div>
-          <div class="metric-line"><span>延期单数</span><b>{{ stats.delayedCount }}</b></div>
-          <div class="metric-line highlight"><span>占比</span><b>{{ stats.delayRatio }}</b></div>
-          <div class="metric-line"><span>延期平均天数</span><b>{{ stats.delayDaysAvg }}</b></div>
-        </article>
+        <article v-if="totalStats" class="factory-summary total-summary">
+          <h3 class="factory-name total-name">{{ factoryCount }} 家工厂总计</h3>
+          <div class="metrics-grid">
+            <div class="metric-card price-card">
+              <h4><span class="metric-icon">💰</span>价格</h4>
+              <div class="metric-line"><span>核价总金额</span><b>{{ totalStats.quoteAmount }}</b></div>
+              <div class="metric-line"><span>外发总金额</span><b>{{ totalStats.outAmount }}</b></div>
+              <div class="metric-line highlight"><span>占比</span><b>{{ totalStats.amountRatio }}</b></div>
+            </div>
 
-        <article class="metric-card quality-card">
-          <h3><span class="metric-icon">🔍</span>品质</h3>
-          <div class="metric-line"><span>验货总单数</span><b>{{ stats.intInspect }}</b></div>
-          <div class="metric-line"><span>合格单数</span><b>{{ stats.intPass }}</b></div>
-          <div class="metric-line highlight"><span>合格率</span><b>{{ stats.intRate }}</b></div>
-        </article>
+            <div class="metric-card delivery-card">
+              <h4><span class="metric-icon">📅</span>交期</h4>
+              <div class="metric-line"><span>订单总单数</span><b>{{ totalStats.orderCount }}</b></div>
+              <div class="metric-line"><span>延期单数</span><b>{{ totalStats.delayedCount }}</b></div>
+              <div class="metric-line highlight"><span>占比</span><b>{{ totalStats.delayRatio }}</b></div>
+              <div class="metric-line"><span>延期平均天数</span><b>{{ totalStats.delayDaysAvg }}</b></div>
+            </div>
 
-        <article class="metric-card site-card">
-          <h3><span class="metric-icon">🧹</span>现场管理</h3>
-          <div class="metric-line"><span>现场得分</span><b>{{ siteScore }}</b></div>
-          <div class="metric-line"><span>折算总达成率</span><b class="site-rate">{{ siteRate }}</b></div>
+            <div class="metric-card quality-card">
+              <h4><span class="metric-icon">🔍</span>品质</h4>
+              <div class="metric-line"><span>验货总单数</span><b>{{ totalStats.intInspect }}</b></div>
+              <div class="metric-line"><span>合格单数</span><b>{{ totalStats.intPass }}</b></div>
+              <div class="metric-line highlight"><span>合格率</span><b>{{ totalStats.intRate }}</b></div>
+            </div>
+
+            <div class="metric-card site-card">
+              <h4><span class="metric-icon">🧹</span>现场管理</h4>
+              <div class="metric-line"><span>现场平均得分</span><b>{{ totalSiteScore }}</b></div>
+              <div class="metric-line"><span>平均折算达成率</span><b class="site-rate">{{ totalSiteRate }}</b></div>
+            </div>
+          </div>
         </article>
       </section>
     </div>
@@ -129,9 +264,15 @@ onMounted(async () => {
 .back { font-size: .95rem; }
 .state { padding: 3rem 1rem; text-align: center; color: var(--muted); border: 1px solid var(--border); border-radius: var(--radius-sm); background: #fff; }
 .state.error { color: #dc2626; }
+.factory-comparison { display: flex; flex-direction: column; gap: 1.15rem; }
+.factory-summary { display: flex; flex-direction: column; gap: .55rem; }
+.factory-name { margin: 0; padding: .15rem .25rem .45rem; border-bottom: 3px solid #84cc16; color: #1f2937; font-size: 1.1rem; word-break: break-word; }
+.total-summary { margin-top: .8rem; padding-top: 1rem; border-top: 2px solid #4f46e5; }
+.total-name { color: #3730a3; border-bottom-color: #4f46e5; font-size: 1.2rem; }
+.total-summary .metric-card { box-shadow: 0 5px 16px rgba(79, 70, 229, .08); }
 .metrics-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .85rem; }
-.metric-card { --accent: #4f46e5; min-height: 230px; border: 1px solid var(--border); border-top: 4px solid var(--accent); border-bottom: 4px solid var(--accent); border-radius: 8px; overflow: hidden; background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 7%, #fff), #fff 42%); }
-.metric-card h3 { display: flex; align-items: center; gap: .55rem; margin: 0 0 .7rem; padding: .85rem 1rem; color: var(--accent); border-bottom: 1px solid color-mix(in srgb, var(--accent) 18%, #fff); font-size: 1.2rem; }
+.metric-card { --accent: #4f46e5; min-height: 210px; border: 1px solid var(--border); border-top: 4px solid var(--accent); border-bottom: 4px solid var(--accent); border-radius: 8px; overflow: hidden; background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 7%, #fff), #fff 42%); }
+.metric-card h4 { display: flex; align-items: center; gap: .55rem; margin: 0 0 .7rem; padding: .85rem 1rem; color: var(--accent); border-bottom: 1px solid color-mix(in srgb, var(--accent) 18%, #fff); font-size: 1.15rem; }
 .metric-icon { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 7px; background: color-mix(in srgb, var(--accent) 14%, #fff); }
 .metric-line { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; padding: .2rem 1.1rem; font-size: 1.05rem; }
 .metric-line b { font-size: 1.1rem; }
